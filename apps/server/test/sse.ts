@@ -12,6 +12,8 @@ export interface SseClient {
   next(timeoutMs?: number): Promise<SseMessage>;
   /** Az első olyan üzenet, amelyre a feltétel igaz; a többit eldobja. */
   waitFor(pred: (m: SseMessage) => boolean, timeoutMs?: number): Promise<SseMessage>;
+  /** Akkor teljesül, amikor a szerver lezárta a folyamot. */
+  ended: Promise<void>;
   close(): void;
 }
 
@@ -35,9 +37,10 @@ export async function openStream(
   const waiters: Array<() => void> = [];
   let buffer = '';
   const decoder = new TextDecoder();
+  let ended: Promise<void> = Promise.resolve();
   if (res.ok && res.body) {
     const reader = res.body.getReader();
-    void (async () => {
+    ended = (async () => {
       try {
         for (;;) {
           const { value, done } = await reader.read();
@@ -83,6 +86,7 @@ export async function openStream(
 
   return {
     status: res.status,
+    ended,
     next,
     waitFor: async (pred, timeoutMs = 5000) => {
       const deadline = Date.now() + timeoutMs;

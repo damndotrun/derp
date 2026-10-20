@@ -25,7 +25,7 @@ describe('health', () => {
 describe('belépés', () => {
   it('a session végpont belépés nélkül is válaszol', async () => {
     const res = await api('GET', '/api/session', undefined, false);
-    expect(res.json()).toEqual({ user: null, devLogin: true, tzDisplay: 'Europe/Budapest' });
+    expect(res.json()).toEqual({ user: null, devLogin: true, googleLogin: false, tzDisplay: 'Europe/Budapest' });
   });
 
   it('dev-login létező felhasználóval munkamenetet ad', async () => {
@@ -73,10 +73,15 @@ describe('projektek', () => {
   });
 
   it('létrehozás → „Projekt létrehozva” esemény', async () => {
-    const created = await api('POST', '/api/projects', { name: 'Minta Kft. – légtechnika felmérés', clientName: 'Minta Kft.' });
+    const client = (await api('POST', '/api/clients', { name: 'Minta Kft.' })).json();
+    const created = await api('POST', '/api/projects', { name: 'Minta Kft. – légtechnika felmérés', clientId: client.id });
     expect(created.statusCode).toBe(201);
     const project = created.json();
-    expect(project).toMatchObject({ name: 'Minta Kft. – légtechnika felmérés', clientName: 'Minta Kft.', version: 1 });
+    expect(project).toMatchObject({
+      name: 'Minta Kft. – légtechnika felmérés',
+      client: { id: client.id, name: 'Minta Kft.' },
+      version: 1,
+    });
 
     const events = (await api('GET', `/api/projects/${project.id}/events`)).json().items;
     expect(events).toHaveLength(1);
@@ -86,7 +91,7 @@ describe('projektek', () => {
       source: 'user',
       title: 'Projekt létrehozva',
       actor: { name: 'Admin Ádám' },
-      data: { name: 'Minta Kft. – légtechnika felmérés', clientName: 'Minta Kft.' },
+      data: { name: 'Minta Kft. – légtechnika felmérés', client: { id: client.id, name: 'Minta Kft.' } },
       parentId: null,
     });
 
@@ -168,5 +173,15 @@ describe('eseménynapló', () => {
     ]);
     expect((await api('GET', `/api/projects/${p.id}/events?limit=2`)).json().items).toHaveLength(2);
     expect((await api('GET', `/api/projects/${p.id}/events?limit=0`)).statusCode).toBe(400);
+  });
+});
+
+describe('adatvédelmi tájékoztató', () => {
+  it('a /adatvedelem belépés nélkül 200, önálló HTML', async () => {
+    const res = await api('GET', '/adatvedelem', undefined, false);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/^text\/html/);
+    expect(res.body).toContain('<h1>Adatvédelmi tájékoztató</h1>');
+    expect(res.body).toContain('gmail.readonly');
   });
 });

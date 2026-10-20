@@ -1,12 +1,14 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { and, eq, gt, sql } from 'drizzle-orm';
+import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { DevLoginBody, SessionInfo, User } from '@derp/shared';
+import { writeAudit } from './audit.ts';
 import type { Config } from './config.ts';
 import type { Db } from './db.ts';
 import { unauthorized } from './errors.ts';
+import { GOOGLE_ENDPOINTS, googleLoginRoutes, type FetchFn, type GoogleEndpoints } from './google-oidc.ts';
 import { sessions, users } from './schema.ts';
 
 export const SESSION_COOKIE = 'derp_session';
@@ -32,9 +34,19 @@ async function userForToken(db: Db, token: string): Promise<User | null> {
     .select({ id: users.id, email: users.email, name: users.name, role: users.role })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
-    .where(and(eq(sessions.id, hashToken(token)), gt(sessions.expiresAt, sql`now()`)))
+    .where(and(eq(sessions.id, hashToken(token)), gt(sessions.expiresAt, sql`now()`), isNull(users.deactivatedAt)))
     .limit(1);
   return row ?? null;
+}
+
+/** Aktív felhasználó e-mail-cím szerint (kis- és nagybetűtől függetlenül). */
+async function activeUserByEmail(db: Db, email: string): Promise<User | null> {
+  const [user] = await db
+    .select({ id: users.id, email: users.email, name: users.name, role: users.role })
+    .from(users)
+    .where(and(eq(sql`lower(${users.email})`, email.toLowerCase()), isNull(users.deactivatedAt)))
+    .limit(1);
+  return user ?? null;
 }
 
 /** preHandler: csak bejelentkezett felhasználót enged tovább. */
@@ -46,7 +58,15 @@ export async function requireUser(req: FastifyRequest): Promise<void> {
  * Munkamenet-kezelés és belépési végpontok. Közvetlenül az alkalmazásra kerül (nem `register`-rel),
  * hogy az `onRequest` hook minden útvonalon beállítsa a `req.user`-t.
  */
-export function registerAuth(app: FastifyInstance, opts: { db: Db; config: Config }): void {
+export interface AuthOptions {
+  db: Db;
+  config: Config;
+  /** A Google felé menő kérések (tesztben mockolható). */
+  googleFetch?: FetchFn;
+  googleEndpoints?: GoogleEndpoints;
+}
+
+export async function registerAuth(app: FastifyInstance, opts: AuthOptions): Promise<void> {
   const { db, config } = opts;
   const secure = config.publicBaseUrl.startsWith('https://');
 
@@ -69,11 +89,19 @@ export function registerAuth(app: FastifyInstance, opts: { db: Db; config: Confi
       expires: expiresAt,
     });
 
+  /** Munkamenet + süti egy már azonosított felhasználónak; a belépés az auditnaplóba kerül. */
+  const startSession = async (reply: FastifyReply, user: User, method: 'google' | 'dev') => {
+    const { token, expiresAt } = await createSession(db, user.id);
+    setSessionCookie(reply, token, expiresAt);
+    await writeAudit(db, { userId: user.id, action: 'login', entityType: 'user', entityId: user.id, label: user.name, data: { method } });
+  };
+
   const r = app.withTypeProvider<ZodTypeProvider>();
 
   r.get('/api/session', { schema: { response: { 200: SessionInfo } } }, async (req) => ({
     user: req.user,
     devLogin: config.devLogin,
+    googleLogin: config.googleLogin !== null,
     tzDisplay: config.tzDisplay,
   }));
 
@@ -93,16 +121,29 @@ export function registerAuth(app: FastifyInstance, opts: { db: Db; config: Confi
       '/api/dev-login',
       { schema: { body: DevLoginBody, response: { 200: z.object({ user: User }) } } },
       async (req, reply) => {
-        const [user] = await db
-          .select({ id: users.id, email: users.email, name: users.name, role: users.role })
-          .from(users)
-          .where(eq(sql`lower(${users.email})`, req.body.email.toLowerCase()))
-          .limit(1);
+        const user = await activeUserByEmail(db, req.body.email);
         if (!user) throw unauthorized('Ismeretlen felhasználó');
-        const { token, expiresAt } = await createSession(db, user.id);
-        setSessionCookie(reply, token, expiresAt);
+        await startSession(reply, user, 'dev');
         return { user };
       },
     );
+  }
+
+  if (config.googleLogin) {
+    await app.register(googleLoginRoutes, {
+      ...config.googleLogin,
+      publicBaseUrl: config.publicBaseUrl,
+      secure,
+      fetch: opts.googleFetch ?? fetch,
+      endpoints: opts.googleEndpoints ?? GOOGLE_ENDPOINTS,
+      signIn: async (reply, email) => {
+        const user = await activeUserByEmail(db, email);
+        if (!user) return false;
+        await startSession(reply, user, 'google');
+        return true;
+      },
+    });
+  } else if (config.nodeEnv === 'production') {
+    app.log.warn('a Google-belépés nincs beállítva (GOOGLE_LOGIN_CLIENT_ID / _SECRET), belépni nem lehet');
   }
 }

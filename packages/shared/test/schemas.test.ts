@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { EventType, ModuleManifestData, ProjectCreate, ProjectUpdate } from '../src/index.ts';
+import { ContactCreate, EventType, ModuleManifestData, ProjectCreate, ProjectUpdate, UserUpdate } from '../src/index.ts';
 
 describe('ProjectCreate', () => {
-  it('levágja a szóközöket és üres ügyfelet ad alapból', () => {
-    expect(ProjectCreate.parse({ name: '  Minta  ' })).toEqual({ name: 'Minta', clientName: '' });
+  it('levágja a szóközöket, ügyfél nélkül is létrehozható', () => {
+    expect(ProjectCreate.parse({ name: '  Minta  ' })).toEqual({ name: 'Minta', clientId: null });
   });
 
   it('üres nevet nem enged', () => {
@@ -15,7 +15,7 @@ describe('ProjectUpdate', () => {
   it('verziót és legalább egy mezőt kér', () => {
     expect(ProjectUpdate.safeParse({ version: 1 }).success).toBe(false);
     expect(ProjectUpdate.safeParse({ name: 'X' }).success).toBe(false);
-    expect(ProjectUpdate.safeParse({ version: 1, clientName: '' }).success).toBe(true);
+    expect(ProjectUpdate.safeParse({ version: 1, clientId: null }).success).toBe(true);
   });
 });
 
@@ -45,5 +45,21 @@ describe('ModuleManifestData', () => {
     expect(
       ModuleManifestData.safeParse({ id: 'x', version: '0.1.0', permissions: [{ key: 'x.read', roles: ['vezeto'] }] }).success,
     ).toBe(false);
+  });
+});
+
+describe('ContactCreate', () => {
+  it('üres vagy érvényes e-mail-címet fogad el', () => {
+    expect(ContactCreate.parse({ name: 'Kovács Béla' })).toMatchObject({ email: '', phone: '' });
+    expect(ContactCreate.safeParse({ name: 'K', email: ' bela@minta.hu ' }).data?.email).toBe('bela@minta.hu');
+    expect(ContactCreate.safeParse({ name: 'K', email: 'nem-email' }).success).toBe(false);
+  });
+});
+
+describe('UserUpdate', () => {
+  it('verziót és legalább egy mezőt kér, ismeretlen szerepkört nem enged', () => {
+    expect(UserUpdate.safeParse({ version: 1 }).success).toBe(false);
+    expect(UserUpdate.safeParse({ version: 1, active: false }).success).toBe(true);
+    expect(UserUpdate.safeParse({ version: 1, role: 'vezeto' }).success).toBe(false);
   });
 });

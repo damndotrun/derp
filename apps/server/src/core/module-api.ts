@@ -2,7 +2,7 @@
 // segédeket a `ModuleContext` adja, így a modul kódja nem függ a mag belső fájljaitól.
 import type { FastifyInstance, FastifyRequest, preHandlerAsyncHookHandler } from 'fastify';
 import type pg from 'pg';
-import type { ModuleManifestData, Project } from '@derp/shared';
+import type { AuditAction, ModuleManifestData, Project } from '@derp/shared';
 import type { Config } from './config.ts';
 import type { Db } from './db.ts';
 import type { HttpError } from './errors.ts';
@@ -13,6 +13,17 @@ export type { NewEvent } from './events.ts';
 
 /** Tranzakción belül a `tx`, különben a `db`. */
 export type DbWriter = Pick<Db, 'insert'>;
+
+export interface ModuleAuditEntry {
+  action: AuditAction;
+  /** A modulon belüli entitás neve (pl. `file`); a naplóban `<modul>.<entity>`. */
+  entity: string;
+  entityId: string;
+  /** Emberi olvasásra: az entitás neve a művelet idején. */
+  label?: string;
+  projectId?: string | null;
+  data?: Record<string, unknown>;
+}
 
 /** A `seedE2E` hook környezete (a CLI-ből is fut, ezért nincs benne a teljes konfiguráció). */
 export interface ModuleSeedContext {
@@ -27,8 +38,21 @@ export interface ModuleSeedContext {
 /** A modul útvonalainak környezete. */
 export interface ModuleContext extends ModuleSeedContext {
   config: Config;
-  /** A projekt, ha létezik, nincs törölve és a felhasználó láthatja; különben 404. */
+  /**
+   * A projekt, ha létezik, nincs törölve és a felhasználó láthatja. Nem létező vagy törölt projektre 404; ha a
+   * felhasználó nem láthatja (terepes, nincs hozzárendelve), 403. Minden projekthez kötött modul-végpont ezzel kezdjen.
+   */
   requireProject(req: FastifyRequest, projectId: string): Promise<Project>;
+  /**
+   * A felhasználó által látható projektek azonosítói; `null`, ha mindet látja (admin, iroda). Projektek közötti
+   * listákhoz (pl. „Mai kiszállásaim”, olvasatlan üzenetek) a terepes-szűréshez.
+   */
+  visibleProjectIds(req: FastifyRequest): Promise<string[] | null>;
+  /**
+   * Auditnapló-bejegyzés (ki, mikor, mit nézett meg vagy módosított). Az entitás típusa `<modul>.<entity>` lesz.
+   * A megtekintést (`view`) percen belül ugyanarra az entitásra nem írja újra.
+   */
+  audit(req: FastifyRequest, entry: ModuleAuditEntry, tx?: DbWriter): Promise<void>;
   /** preHandler: csak akkor enged tovább, ha a felhasználó szerepköre megkapja a modul jogosultságát (különben 403). */
   requirePermission(key: string): preHandlerAsyncHookHandler;
   /** Hibák a mag egységes hibaformátumában (`{ error: { code, message } }`). */

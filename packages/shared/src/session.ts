@@ -6,6 +6,8 @@ export const DevLoginBody = z.object({ email: z.email() });
 export const SessionInfo = z.object({
   user: User.nullable(),
   devLogin: z.boolean(),
+  /** Be van-e állítva a Google-belépés (`GOOGLE_LOGIN_CLIENT_ID` / `_SECRET`). */
+  googleLogin: z.boolean(),
   tzDisplay: z.string(),
 });
 export type SessionInfo = z.infer<typeof SessionInfo>;

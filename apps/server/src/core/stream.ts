@@ -2,7 +2,8 @@ import type { FastifyBaseLogger, FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import pg from 'pg';
 import { z } from 'zod';
-import type { User } from '@derp/shared';
+import { CORE_EVENTS, type User } from '@derp/shared';
+import { visibleProjectIds } from './access.ts';
 import type { Db } from './db.ts';
 import { eventBySeq, eventsAfter, lastEventSeq, type SequencedEvent } from './events.ts';
 
@@ -14,6 +15,8 @@ export const BACKLOG_LIMIT = 500;
 const RECONNECT_MS = 2_000;
 
 export interface StreamSubscriber {
+  /** A kapcsolat felhasználója (szerepkör-változáskor a kapcsolatai lezárulnak). */
+  userId: string;
   event(e: SequencedEvent): void;
   /** Események maradhattak ki (pl. a LISTEN-kapcsolat újraépült): a kliens töltse újra az adatait. */
   reset(): void;
@@ -105,6 +108,14 @@ export class EventHub {
     for (const s of this.subscribers) s.close();
   }
 
+  /**
+   * Egy felhasználó kapcsolatainak lezárása (pl. megváltozott a szerepköre vagy kikapcsolták): a kliens újracsatlakozik,
+   * és az új kapcsolat már a friss jogosultsággal szűr. Csak ebben a folyamatban nyitott kapcsolatokra hat.
+   */
+  closeUserStreams(userId: string): void {
+    for (const s of this.subscribers) if (s.userId === userId) s.close();
+  }
+
   async stop(): Promise<void> {
     this.stopped = true;
     if (this.retry) clearTimeout(this.retry);
@@ -117,9 +128,31 @@ export class EventHub {
   }
 }
 
-/** Láthatja-e a felhasználó az eseményt. A 2a-ban minden belépett felhasználó mindent lát; a terepes-szűrés a 2b. */
-function visibleTo(_user: User, _e: SequencedEvent): boolean {
-  return true;
+/**
+ * Egy kapcsolat láthatósági szűrője. Az admin és az iroda minden eseményt lát; a terepes csak a hozzá rendelt
+ * projektekéit (projekt nélküli eseményt nem). A hozzárendelés-események (`core.member_added` / `_removed`, a
+ * `data.userId`-val) sorrendben frissítik a hozzárendelt projektek halmazát, így a kapcsolat élete alatti változás is
+ * érvényesül: a hozzárendelés eseményét már megkapja, a levételét még igen, az utána jövőket már nem.
+ */
+export class StreamVisibility {
+  private readonly user: User;
+  private readonly memberOf: Set<string> | null;
+
+  constructor(user: User, projectIds: string[] | null) {
+    this.user = user;
+    this.memberOf = projectIds ? new Set(projectIds) : null;
+  }
+
+  /** Eseményenként egyszer, sorrendben hívandó. */
+  accept({ event: e }: SequencedEvent): boolean {
+    if (!this.memberOf) return true;
+    if (!e.projectId) return false;
+    const self = e.data.userId === this.user.id;
+    if (self && e.type === CORE_EVENTS.memberAdded) this.memberOf.add(e.projectId);
+    const visible = this.memberOf.has(e.projectId);
+    if (self && e.type === CORE_EVENTS.memberRemoved) this.memberOf.delete(e.projectId);
+    return visible;
+  }
 }
 
 const StreamQuery = z.object({ lastEventId: z.string().regex(/^\d+$/).optional() });
@@ -156,16 +189,23 @@ export async function streamRoutes(app: FastifyInstance, opts: { db: Db; hub: Ev
     const sendEvent = (e: SequencedEvent) => write(`id: ${e.seq}\nevent: event\ndata: ${JSON.stringify(e.event)}\n\n`);
     write('retry: 3000\n\n');
 
-    // A feliratkozás a visszamenőleges lekérdezés előtt történik; ami közben jön, sorba áll, és a már elküldötteket
-    // nem küldjük újra.
+    // A feliratkozás a láthatóság betöltése és a visszamenőleges lekérdezés előtt történik; ami közben jön, sorba áll.
+    // Minden esemény egyszer megy át a szűrőn: a felépítés közben (visszamenőleges és sorba állt) feldolgozottakat a
+    // `seen` tartja nyilván, az élő NOTIFY ezeket már nem küldi újra.
     let queue: SequencedEvent[] | null = [];
-    const sent = new Set<number>();
+    const seen = new Set<number>();
+    let visibility: StreamVisibility | null = null;
     let ping: NodeJS.Timeout | null = null;
+    const deliver = (e: SequencedEvent, track: boolean) => {
+      if (seen.has(e.seq)) return;
+      if (track) seen.add(e.seq);
+      if (visibility!.accept(e)) sendEvent(e);
+    };
     const subscriber: StreamSubscriber = {
+      userId: user.id,
       event: (e) => {
-        if (!visibleTo(user, e)) return;
         if (queue) queue.push(e);
-        else if (!sent.has(e.seq)) sendEvent(e);
+        else deliver(e, false);
       },
       reset: () => write('event: reset\ndata: {}\n\n'),
       close: () => res.end(),
@@ -177,6 +217,7 @@ export async function streamRoutes(app: FastifyInstance, opts: { db: Db; hub: Ev
     });
 
     try {
+      visibility = new StreamVisibility(user, await visibleProjectIds(db, user));
       let readySeq: number;
       if (lastSeq === null) {
         readySeq = await lastEventSeq(db);
@@ -186,17 +227,14 @@ export async function streamRoutes(app: FastifyInstance, opts: { db: Db; hub: Ev
           readySeq = await lastEventSeq(db);
           subscriber.reset();
         } else {
-          for (const e of backlog) {
-            sent.add(e.seq);
-            if (visibleTo(user, e)) sendEvent(e);
-          }
+          for (const e of backlog) deliver(e, true);
           readySeq = backlog.at(-1)?.seq ?? lastSeq;
         }
       }
       write(`id: ${readySeq}\nevent: ready\ndata: {}\n\n`);
       const pending = queue;
       queue = null;
-      for (const e of pending) if (!sent.has(e.seq)) sendEvent(e);
+      for (const e of pending) deliver(e, true);
       // Ha a kliens közben bontott, a `close` már lefutott; ilyenkor nincs mit pingelni.
       if (!res.destroyed && !res.writableEnded) ping = setInterval(() => write(': ping\n\n'), pingMs);
     } catch (err) {

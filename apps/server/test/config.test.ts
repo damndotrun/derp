@@ -14,7 +14,17 @@ describe('loadConfig', () => {
       tzDisplay: 'Europe/Budapest',
       modules: '*',
       port: 8080,
+      googleLogin: null,
     });
+  });
+
+  it('GOOGLE_LOGIN_CLIENT_ID és _SECRET csak együtt', () => {
+    expect(loadConfig({ ...base, GOOGLE_LOGIN_CLIENT_ID: 'id', GOOGLE_LOGIN_CLIENT_SECRET: 'titok' }).googleLogin).toEqual({
+      clientId: 'id',
+      clientSecret: 'titok',
+    });
+    expect(() => loadConfig({ ...base, GOOGLE_LOGIN_CLIENT_ID: 'id' })).toThrow(/GOOGLE_LOGIN_CLIENT_ID/);
+    expect(loadConfig({ ...base, GOOGLE_LOGIN_CLIENT_ID: '', GOOGLE_LOGIN_CLIENT_SECRET: '' }).googleLogin).toBeNull();
   });
 
   it('DERP_MODULES: `*`, üres vagy vesszős lista', () => {

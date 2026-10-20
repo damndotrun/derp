@@ -7,6 +7,9 @@ export const CORE_EVENTS = {
   projectCreated: 'core.project_created',
   projectUpdated: 'core.project_updated',
   projectDeleted: 'core.project_deleted',
+  /** Kolléga hozzárendelve a projekthez (`data.userId`); a terepes ettől látja a projektet. */
+  memberAdded: 'core.member_added',
+  memberRemoved: 'core.member_removed',
 } as const;
 
 export const TimelineEvent = z.object({

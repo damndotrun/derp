@@ -41,10 +41,17 @@ const EnvSchema = z
           return false;
         }
       }, 'TZ_DISPLAY nem érvényes IANA időzóna'),
+    // Google-belépés (OpenID Connect); élesítés a 13. munkacsomagban. Ha nincs megadva, csak a dev-login él.
+    GOOGLE_LOGIN_CLIENT_ID: z.string().trim().optional(),
+    GOOGLE_LOGIN_CLIENT_SECRET: z.string().trim().optional(),
   })
   .refine((env) => !(env.NODE_ENV === 'production' && env.DEV_LOGIN === '1'), {
     message: 'DEV_LOGIN=1 nem használható NODE_ENV=production mellett',
     path: ['DEV_LOGIN'],
+  })
+  .refine((env) => !env.GOOGLE_LOGIN_CLIENT_ID === !env.GOOGLE_LOGIN_CLIENT_SECRET, {
+    message: 'a GOOGLE_LOGIN_CLIENT_ID és a GOOGLE_LOGIN_CLIENT_SECRET csak együtt adható meg',
+    path: ['GOOGLE_LOGIN_CLIENT_ID'],
   });
 
 export interface Config {
@@ -56,6 +63,8 @@ export interface Config {
   tzDisplay: string;
   modules: ModuleSelection;
   port: number;
+  /** A Google-belépés OAuth-kliense; `null`, ha nincs beállítva. */
+  googleLogin: { clientId: string; clientSecret: string } | null;
 }
 
 export class ConfigError extends Error {}
@@ -76,5 +85,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     tzDisplay: e.TZ_DISPLAY,
     modules: e.DERP_MODULES,
     port: e.PORT,
+    googleLogin:
+      e.GOOGLE_LOGIN_CLIENT_ID && e.GOOGLE_LOGIN_CLIENT_SECRET
+        ? { clientId: e.GOOGLE_LOGIN_CLIENT_ID, clientSecret: e.GOOGLE_LOGIN_CLIENT_SECRET }
+        : null,
   };
 }

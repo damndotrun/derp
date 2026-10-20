@@ -2,16 +2,21 @@ import fastifyCookie from '@fastify/cookie';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { hasZodFastifySchemaValidationErrors, serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 import type pg from 'pg';
+import { auditRoutes } from './core/audit.ts';
 import { registerAuth, requireUser } from './core/auth.ts';
+import { clientRoutes } from './core/clients.ts';
 import type { Config } from './core/config.ts';
 import { createDb } from './core/db.ts';
 import { HttpError } from './core/errors.ts';
+import type { FetchFn, GoogleEndpoints } from './core/google-oidc.ts';
 import { healthRoutes } from './core/health.ts';
 import { createModuleContext, moduleListRoutes } from './core/module-host.ts';
 import { loadModules, MODULES_DIR, type LoadedModule } from './core/modules.ts';
+import { privacyRoutes } from './core/privacy.ts';
 import { projectRoutes } from './core/projects.ts';
 import { staticRoutes, WEB_DIST } from './core/static.ts';
 import { EventHub, PING_MS, streamRoutes } from './core/stream.ts';
+import { userRoutes } from './core/users.ts';
 
 export interface AppOptions {
   config: Config;
@@ -22,6 +27,9 @@ export interface AppOptions {
   modulesDir?: string;
   /** Az SSE-ping gyakorisága (tesztben rövidebb). */
   streamPingMs?: number;
+  /** A Google-belépés kérései (tesztben mockolt válaszokkal). */
+  googleFetch?: FetchFn;
+  googleEndpoints?: GoogleEndpoints;
 }
 
 export async function buildApp({
@@ -31,6 +39,8 @@ export async function buildApp({
   webRoot = WEB_DIST,
   modulesDir = MODULES_DIR,
   streamPingMs = PING_MS,
+  googleFetch,
+  googleEndpoints,
 }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: logger ? { level: config.nodeEnv === 'test' ? 'warn' : 'info' } : false });
   const db = createDb(pool);
@@ -63,10 +73,14 @@ export async function buildApp({
 
   await app.register(fastifyCookie, { secret: config.sessionSecret });
   await app.register(healthRoutes, { pool });
-  registerAuth(app, { db, config });
+  await app.register(privacyRoutes);
+  await registerAuth(app, { db, config, googleFetch, googleEndpoints });
   await app.register(async (protectedScope) => {
     protectedScope.addHook('preHandler', requireUser);
     await protectedScope.register(projectRoutes, { db });
+    await protectedScope.register(clientRoutes, { db });
+    await protectedScope.register(userRoutes, { db, onUserChanged: (id) => hub.closeUserStreams(id) });
+    await protectedScope.register(auditRoutes, { db });
     await protectedScope.register(moduleListRoutes, { modules });
     await protectedScope.register(streamRoutes, { db, hub, pingMs: streamPingMs });
     for (const m of modules) {
