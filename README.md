@@ -14,7 +14,7 @@ Előfeltétel: Node 22.18+ (a szerver TypeScriptje fordítás nélkül, a Node b
 pnpm install
 pnpm db:up                                   # Postgres 16 konténer a 127.0.0.1:5432-n
 export DATABASE_URL=postgres://derp:derp@localhost:5432/derp
-pnpm seed:e2e                                # migráció + admin@derp.test (Admin Ádám)
+pnpm seed:e2e                                # migráció + admin@, iroda@, terepes@derp.test
 SESSION_SECRET=$(openssl rand -base64 48) NODE_ENV=development DEV_LOGIN=1 pnpm dev
 # kliens: http://localhost:5173 (az /api a 8080-as szerverre megy)
 ```
@@ -25,11 +25,21 @@ SESSION_SECRET=$(openssl rand -base64 48) NODE_ENV=development DEV_LOGIN=1 pnpm 
 | `pnpm typecheck` | TypeScript-ellenőrzés minden csomagban |
 | `pnpm e2e` | Playwright (asztali 1440×900 és Pixel 7). `E2E_BASE_URL` nélkül maga indít szervert a `DATABASE_URL`-re `NODE_ENV=test`, `DEV_LOGIN=1` mellett; előre telepített Chromiumhoz `PLAYWRIGHT_CHROMIUM_EXECUTABLE` |
 | `pnpm migrate` | a még nem futott migrációk: a mag (`apps/server/src/core/migrations/`), majd a bekapcsolt modulok (`modules/<id>/migrations/`) |
-| `pnpm seed:e2e` | migráció + tesztfelhasználók + a bekapcsolt modulok `seedE2E` hookjai |
+| `pnpm seed:e2e` | migráció + tesztfelhasználók (Admin Ádám `admin@derp.test`, Iroda Ildi `iroda@derp.test`, Terepes Tamás `terepes@derp.test`) + a bekapcsolt modulok `seedE2E` hookjai |
 
 Az `E2E_BASE_URL` nélküli `pnpm e2e` két szervert indít: a 8080-ason minden modul be van kapcsolva, a 8082-esen
 egyik sem (`DERP_MODULES=` üres; a modulmenü eltűnésének ellenőrzéséhez). Külső futtatásnál a modulok nélküli
 példány címe `E2E_NO_MODULES_BASE_URL`; ha nincs megadva, az a teszt kimarad.
+
+## Belépés és jogosultság
+
+- Belépés Google-fiókkal (OpenID Connect), ha a `GOOGLE_LOGIN_CLIENT_ID` és a `GOOGLE_LOGIN_CLIENT_SECRET` meg van
+  adva; a Google-kliensnél engedélyezendő visszatérési cím: `${PUBLIC_BASE_URL}/api/auth/google/callback`. Csak az
+  adminfelületen (Felhasználók) felvett, aktív e-mail-címmel lehet belépni; tesztben és fejlesztéskor `DEV_LOGIN=1`.
+- Szerepkörök: `admin` (minden + felhasználók, auditnapló), `iroda` (minden projekt, ügyfelek), `terepes` (csak a
+  hozzá rendelt projektek és azok ügyfeleinek elérhetősége).
+- Auditnapló: ki, mikor, mit nézett meg vagy módosított (projekt, ügyfél, kapcsolattartó, felhasználó, belépés).
+- Nyilvános adatvédelmi tájékoztató: `/adatvedelem` (belépés nélkül, önálló HTML).
 
 ## Modulok
 

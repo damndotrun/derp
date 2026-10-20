@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { inject } from 'vitest';
-import { buildApp } from '../src/app.ts';
+import { buildApp, type AppOptions } from '../src/app.ts';
 import { loadConfig, type Config } from '../src/core/config.ts';
 import { createDb, createPool, type Db } from '../src/core/db.ts';
 import { seedModules } from '../src/core/module-host.ts';
@@ -9,6 +9,8 @@ import { loadModules } from '../src/core/modules.ts';
 import { seedE2E } from '../src/core/seed.ts';
 
 export const ADMIN_EMAIL = 'admin@derp.test';
+export const IRODA_EMAIL = 'iroda@derp.test';
+export const TEREPES_EMAIL = 'terepes@derp.test';
 
 export interface TestContext {
   app: FastifyInstance;
@@ -18,10 +20,7 @@ export interface TestContext {
   close: () => Promise<void>;
 }
 
-export interface TestAppOptions {
-  modulesDir?: string;
-  streamPingMs?: number;
-}
+export type TestAppOptions = Pick<AppOptions, 'modulesDir' | 'streamPingMs' | 'googleFetch' | 'googleEndpoints'>;
 
 export async function createTestApp(env: Record<string, string> = {}, opts: TestAppOptions = {}): Promise<TestContext> {
   const config = loadConfig({
@@ -62,3 +61,11 @@ export async function login(app: FastifyInstance, email = ADMIN_EMAIL): Promise<
   if (!cookie) throw new Error('nincs munkamenet-süti');
   return `${cookie.name}=${cookie.value}`;
 }
+
+export type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+
+/** Kérés egy munkamenet-sütivel (vagy anélkül). */
+export const requester =
+  (app: FastifyInstance, cookie?: string) =>
+  (method: Method, url: string, payload?: object) =>
+    app.inject({ method, url, payload, headers: cookie ? { cookie } : {} });

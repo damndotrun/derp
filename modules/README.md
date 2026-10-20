@@ -45,13 +45,31 @@ export default {
 
 A modul a magból csak típust importál (`@derp/server/module-api`); a futásidejű segédeket a `ctx` adja:
 `ctx.db` (Drizzle), `ctx.pool`, `ctx.config`, `ctx.appendEvent(...)` (csak a manifestben felvett eseménytípussal;
-tranzakcióban második paraméterként a `tx`), `ctx.requireProject(req, id)` (404, ha nincs vagy nem látható),
-`ctx.requirePermission(key)` (preHandler, 403), `ctx.errors.*`. Harmadik féltől származó csomagot a modul a
+tranzakcióban második paraméterként a `tx`), `ctx.requireProject(req, id)`, `ctx.visibleProjectIds(req)`,
+`ctx.audit(req, entry, tx?)`, `ctx.requirePermission(key)` (preHandler, 403), `ctx.errors.*`. Harmadik féltől származó csomagot a modul a
 gyökér `node_modules`-ból ér el (a `.npmrc` `shamefully-hoist`); új függőséget a modul nem vesz fel. Nehéz csomagot
 (`googleapis`, `sharp`, `pdfmake`) a hookon belül dinamikus `import()`-tal érdemes betölteni.
 
 Az új esemény a közös `events` táblába kerül; egy trigger `NOTIFY`-t küld, és a `GET /api/stream` SSE-folyamon minden
 nyitott kliens megkapja.
+
+### Jogosultság és terepes-szűrés
+
+- Szerepkörök: `admin` (minden + beállítások), `iroda` (minden projekt), `terepes` (csak a hozzá rendelt projektek).
+  A hozzárendelés a mag `project_members` táblája (`PUT/DELETE /api/projects/:id/members/:userId`).
+- Minden projekthez kötött végpont a `ctx.requireProject(req, id)`-vel kezdjen: nem létező vagy törölt projektre 404,
+  nem látható projektre (terepes, nincs hozzárendelve) 403.
+- Projekteken átívelő listánál (pl. „Mai kiszállásaim”) a `ctx.visibleProjectIds(req)` adja a látható projekteket
+  (`null` = mind).
+- Az SSE-folyamon a mag szűr: a terepes csak a hozzá rendelt projektek eseményeit kapja, projekt nélkülit nem.
+- Műveletenkénti jogosultság a manifest `permissions` mezőjével és a `ctx.requirePermission(key)`-jel.
+
+### Auditnapló
+
+`ctx.audit(req, { action, entity, entityId, label?, projectId?, data? })`: `action` a `view`, `create`, `update`,
+`delete` egyike; az entitás típusa a naplóban `<modul>.<entity>`. A megtekintést (`view`) ugyanarra az entitásra
+egy percen belül nem írja újra. Személyes adat megnyitásakor (pl. levél, fájl letöltése) érdemes `view`-t írni. Az
+adminfelület a típus nevét a modul `<modul>.audit.<entity>` i18n-kulcsából veszi, ha van ilyen.
 
 ## Kliens oldal (`web/index.ts`)
 

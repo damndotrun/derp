@@ -4,11 +4,13 @@ import type pg from 'pg';
 import { ModuleList, type ModuleInfo, type User } from '@derp/shared';
 import type { Config } from './config.ts';
 import type { Db } from './db.ts';
-import { conflict, forbidden, HttpError, notFound } from './errors.ts';
+import { visibleProjectIds } from './access.ts';
+import { recordView, writeAudit } from './audit.ts';
+import { badRequest, conflict, forbidden, notFound, unauthorized } from './errors.ts';
 import { appendEvent } from './events.ts';
 import type { ModuleContext, ModuleSeedContext } from './module-api.ts';
 import type { LoadedModule } from './modules.ts';
-import { getActiveProject, toProjectDto } from './projects.ts';
+import { getVisibleProject, toProjectDto } from './projects.ts';
 
 export function createSeedContext(m: LoadedModule, db: Db, pool: pg.Pool): ModuleSeedContext {
   const { id, eventTypes } = m.manifest;
@@ -30,8 +32,20 @@ export function createModuleContext(m: LoadedModule, db: Db, pool: pg.Pool, conf
   return {
     ...createSeedContext(m, db, pool),
     config,
-    // A terepes felhasználók szűrése (csak a hozzá rendelt projektek) a 2b. munkacsomagban kerül ide.
-    requireProject: async (_req, projectId) => toProjectDto(await getActiveProject(db, projectId)),
+    requireProject: async (req, projectId) => {
+      if (!req.user) throw unauthorized();
+      return toProjectDto(await getVisibleProject(db, req.user, projectId));
+    },
+    visibleProjectIds: async (req) => {
+      if (!req.user) throw unauthorized();
+      return visibleProjectIds(db, req.user);
+    },
+    audit: async (req, entry, tx) => {
+      const entityType = `${m.manifest.id}.${entry.entity}`;
+      const e = { userId: req.user?.id ?? null, entityType, entityId: entry.entityId, label: entry.label, projectId: entry.projectId, data: entry.data };
+      if (entry.action === 'view' && !tx) await recordView(db, e);
+      else await writeAudit(tx ?? db, { ...e, action: entry.action });
+    },
     requirePermission: (key) => {
       const roles = permissions.get(key);
       if (!roles) throw new Error(`A(z) „${m.manifest.id}” modul manifestjében nincs ilyen jogosultság: ${key}`);
@@ -40,7 +54,7 @@ export function createModuleContext(m: LoadedModule, db: Db, pool: pg.Pool, conf
       };
     },
     errors: {
-      badRequest: (message) => new HttpError(400, 'bad_request', message),
+      badRequest,
       notFound,
       forbidden,
       conflict,

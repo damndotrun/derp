@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { BACKLOG_LIMIT } from '../src/core/stream.ts';
-import { createTestApp, login, type TestContext } from './helpers.ts';
+import { createTestApp, login, TEREPES_EMAIL, type TestContext } from './helpers.ts';
 import { openStream, type SseClient } from './sse.ts';
 
 let ctx: TestContext;
@@ -97,5 +97,69 @@ describe('GET /api/stream', () => {
     streams.push(s);
     const msg = await s.waitFor((m) => m.event === 'event');
     expect(JSON.parse(msg.data).projectId).toBe(p.id);
+  });
+});
+
+describe('GET /api/stream terepes-szűréssel', () => {
+  const api = (method: 'POST' | 'PUT' | 'DELETE' | 'PATCH', url: string, payload?: object) =>
+    ctx.app.inject({ method, url, payload, headers: { cookie } });
+  type Ev = { type: string; projectId: string | null; title: string };
+  /** Az összes beérkező esemény addig, amíg egy a feltételnek megfelel (azzal együtt). */
+  const until = async (s: SseClient, pred: (e: Ev) => boolean): Promise<Ev[]> => {
+    const got: Ev[] = [];
+    for (;;) {
+      const m = await s.waitFor((x) => x.event === 'event');
+      const e = JSON.parse(m.data) as Ev;
+      got.push(e);
+      if (pred(e)) return got;
+    }
+  };
+
+  it('a terepes csak a hozzá rendelt projekt eseményeit kapja; a hozzárendelés élőben érvényesül', async () => {
+    const tc = await login(ctx.app, TEREPES_EMAIL);
+    const terepesId = (await ctx.app.inject({ method: 'GET', url: '/api/session', headers: { cookie: tc } })).json().user.id;
+    const mine = await createProject('Terepes látja');
+    const other = await createProject('Terepes nem látja');
+    await api('PUT', `/api/projects/${mine.id}/members/${terepesId}`);
+
+    const s = await openStream(ctx.app, { cookie: tc });
+    streams.push(s);
+    await ready(s);
+
+    // Előbb a nem látható projekt és egy projekt nélküli esemény, utána a látható projekté: ha az elsők átjönnének,
+    // előbb érkeznének.
+    await api('PATCH', `/api/projects/${other.id}`, { version: 1, name: 'Nem látja (mód.)' });
+    await ctx.pool.query("INSERT INTO events (type, source, title) VALUES ('core.global_probe', 'system', 'projekt nélküli')");
+    await api('PATCH', `/api/projects/${mine.id}`, { version: 1, name: 'Látja (mód.)' });
+    let got = await until(s, (e) => e.type === 'core.project_updated' && e.projectId === mine.id);
+    expect(got.every((e) => e.projectId === mine.id)).toBe(true);
+
+    // Hozzárendelés a kapcsolat élete alatt: a hozzárendelés eseménye és az utána jövők már átjönnek.
+    await api('PUT', `/api/projects/${other.id}/members/${terepesId}`);
+    await api('PATCH', `/api/projects/${other.id}`, { version: 2, name: 'Már látja' });
+    got = await until(s, (e) => e.type === 'core.project_updated' && e.projectId === other.id);
+    expect(got.map((e) => e.type)).toEqual(['core.member_added', 'core.project_updated']);
+
+    // Levétel: a levétel eseményét még megkapja, az utána jövőket már nem.
+    await api('DELETE', `/api/projects/${other.id}/members/${terepesId}`);
+    await api('PATCH', `/api/projects/${other.id}`, { version: 3, name: 'Már nem látja' });
+    await api('PATCH', `/api/projects/${mine.id}`, { version: 2, name: 'Látja (2)' });
+    got = await until(s, (e) => e.type === 'core.project_updated' && e.projectId === mine.id);
+    expect(got.map((e) => [e.type, e.projectId === other.id ? 'other' : 'mine'])).toEqual([
+      ['core.member_removed', 'other'],
+      ['core.project_updated', 'mine'],
+    ]);
+  });
+
+  it('Last-Event-ID szerinti pótláskor is szűr', async () => {
+    const tc = await login(ctx.app, TEREPES_EMAIL);
+    const first = await openStream(ctx.app, { cookie: tc });
+    const r = await ready(first);
+    first.close();
+    await createProject('Kimaradt, nem látható');
+    const s = await openStream(ctx.app, { cookie: tc, lastEventId: r.id });
+    streams.push(s);
+    const msg = await s.waitFor((m) => m.event === 'event' || m.event === 'ready');
+    expect(msg.event).toBe('ready');
   });
 });
