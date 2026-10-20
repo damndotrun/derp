@@ -42,6 +42,7 @@ export const coreMessages = {
   'projects.assign': 'Hozzárendelés',
   'projects.unassign': 'Levétel',
   'projects.contacts': 'Ügyfél-elérhetőség',
+  'projects.links': 'A projekt oldalai',
   'clients.title': 'Ügyfelek',
   'clients.new': 'Új ügyfél',
   'clients.name': 'Ügyfél neve',

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { api } from './api.ts';
 import { t, translate } from './i18n.ts';
-import { useModules } from './modules.ts';
+import { menuBadgeFor, useModules, type MenuBadge } from './modules.ts';
 import { isAdmin, isOffice, useSession, useUser } from './session.ts';
 import { useEventStream } from './stream.ts';
 
@@ -22,6 +22,8 @@ export function Layout() {
 interface MenuItem {
   path: string;
   label: string;
+  /** A modul jelvénye a felirat mellett (pl. olvasatlan üzenetek). */
+  Badge?: MenuBadge;
 }
 
 /**
@@ -34,7 +36,9 @@ export function useMenuItems(): MenuItem[] {
   return [
     { path: '/projects', label: t('nav.projects') },
     ...(isOffice(user) ? [{ path: '/clients', label: t('nav.clients') }] : []),
-    ...(modules.data?.items ?? []).flatMap((m) => m.menu.map((i) => ({ path: i.path, label: translate(i.labelKey) }))),
+    ...(modules.data?.items ?? []).flatMap((m) =>
+      m.menu.map((i) => ({ path: i.path, label: translate(i.labelKey), Badge: menuBadgeFor(m.id, i.path) })),
+    ),
     ...(isAdmin(user)
       ? [
           { path: '/admin/users', label: t('nav.users') },
@@ -104,10 +108,11 @@ function Shell({ user }: { user: User }) {
                 <NavLink
                   to={item.path}
                   className={({ isActive }) =>
-                    cn('block rounded-md px-3 py-2 text-sm hover:bg-accent', isActive && 'bg-accent font-medium')
+                    cn('flex items-center justify-between gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent', isActive && 'bg-accent font-medium')
                   }
                 >
                   {item.label}
+                  {item.Badge && <item.Badge />}
                 </NavLink>
               </li>
             ))}
