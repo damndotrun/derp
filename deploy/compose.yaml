@@ -22,6 +22,8 @@ services:
       DERP_MODULES: ${DERP_MODULES:-*}
       GOOGLE_LOGIN_CLIENT_ID: ${GOOGLE_LOGIN_CLIENT_ID:-}
       GOOGLE_LOGIN_CLIENT_SECRET: ${GOOGLE_LOGIN_CLIENT_SECRET:-}
+      # A visits modul ICS-tokenjeinek hash-eléséhez; ha a modul aktív, nélküle az app nem indul el.
+      ICS_TOKEN_PEPPER: ${ICS_TOKEN_PEPPER:-}
       NODE_ENV: production
       NODE_OPTIONS: --max-old-space-size=256
     ports:

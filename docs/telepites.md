@@ -32,6 +32,8 @@ A szkript: kicsomagol → képet épít → `pg_dump` a `backup` alá → `app.u
 1. A titkok a NAS-on (az értékek nem kerülnek ki a gépről):
    - `secrets/.env`: `DATABASE_URL=postgres://derp:<jelszó>@db:5432/derp`, `SESSION_SECRET=<≥32 bájt>`,
      `GOOGLE_LOGIN_CLIENT_ID`, `GOOGLE_LOGIN_CLIENT_SECRET` (Google Cloud projekt `derp-512213`, kliens „dERP login”).
+     `ICS_TOKEN_PEPPER=<≥32 bájt>` (a `visits` modul ICS-tokenjeihez; pl. `openssl rand -hex 32`; csere után minden
+     kolléga ICS-linkje érvénytelen lesz).
    - `secrets/db.env`: `POSTGRES_PASSWORD=<ugyanaz a jelszó>`.
 2. `chown 70:70 /mnt/Tank/derp/db`, `chown 1000:1000 /mnt/Tank/derp/files`.
 3. A fenti frissítési parancs (`app.create`, mert még nincs app).
