@@ -1,8 +1,7 @@
 import { buildApp } from './app.ts';
 import { ConfigError, loadConfig } from './core/config.ts';
 import { createPool } from './core/db.ts';
-
-const PORT = 8080;
+import { ModuleError } from './core/modules.ts';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -17,10 +16,10 @@ async function main(): Promise<void> {
   process.once('SIGTERM', shutdown);
   process.once('SIGINT', shutdown);
 
-  await app.listen({ host: '0.0.0.0', port: PORT });
+  await app.listen({ host: '0.0.0.0', port: config.port });
 }
 
 main().catch((err) => {
-  console.error(err instanceof ConfigError ? err.message : err);
+  console.error(err instanceof ConfigError || err instanceof ModuleError ? err.message : err);
   process.exit(1);
 });

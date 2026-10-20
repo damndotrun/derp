@@ -12,7 +12,16 @@ describe('loadConfig', () => {
       devLogin: false,
       nodeEnv: 'production',
       tzDisplay: 'Europe/Budapest',
+      modules: '*',
+      port: 8080,
     });
+  });
+
+  it('DERP_MODULES: `*`, üres vagy vesszős lista', () => {
+    expect(loadConfig({ ...base, DERP_MODULES: ' * ' }).modules).toBe('*');
+    expect(loadConfig({ ...base, DERP_MODULES: '' }).modules).toEqual([]);
+    expect(loadConfig({ ...base, DERP_MODULES: 'example, docs,,' }).modules).toEqual(['example', 'docs']);
+    expect(() => loadConfig({ ...base, DERP_MODULES: 'Example' })).toThrow(/DERP_MODULES/);
   });
 
   it('DEV_LOGIN=1 mellett production módban nem indul', () => {

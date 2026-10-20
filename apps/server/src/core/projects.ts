@@ -18,7 +18,7 @@ import { projects } from './schema.ts';
 
 type ProjectRow = typeof projects.$inferSelect;
 
-const toDto = (p: ProjectRow): Project => ({
+export const toProjectDto = (p: ProjectRow): Project => ({
   id: p.id,
   name: p.name,
   clientName: p.clientName,
@@ -30,7 +30,7 @@ const toDto = (p: ProjectRow): Project => ({
 const IdParams = z.object({ id: z.uuid() });
 const active = (id: string) => and(eq(projects.id, id), isNull(projects.deletedAt));
 
-async function getActive(db: Db, id: string): Promise<ProjectRow> {
+export async function getActiveProject(db: Db, id: string): Promise<ProjectRow> {
   const [row] = await db.select().from(projects).where(active(id)).limit(1);
   if (!row) throw notFound('A projekt nem található');
   return row;
@@ -42,7 +42,7 @@ export async function projectRoutes(app: FastifyInstance, opts: { db: Db }): Pro
 
   r.get('/api/projects', { schema: { response: { 200: ProjectList } } }, async () => {
     const rows = await db.select().from(projects).where(isNull(projects.deletedAt)).orderBy(desc(projects.createdAt));
-    return { items: rows.map(toDto) };
+    return { items: rows.map(toProjectDto) };
   });
 
   r.post('/api/projects', { schema: { body: ProjectCreate, response: { 201: Project } } }, async (req, reply) => {
@@ -58,11 +58,11 @@ export async function projectRoutes(app: FastifyInstance, opts: { db: Db }): Pro
       });
       return row!;
     });
-    return reply.code(201).send(toDto(project));
+    return reply.code(201).send(toProjectDto(project));
   });
 
   r.get('/api/projects/:id', { schema: { params: IdParams, response: { 200: Project } } }, async (req) =>
-    toDto(await getActive(db, req.params.id)),
+    toProjectDto(await getActiveProject(db, req.params.id)),
   );
 
   r.patch(
@@ -70,7 +70,7 @@ export async function projectRoutes(app: FastifyInstance, opts: { db: Db }): Pro
     { schema: { params: IdParams, body: ProjectUpdate, response: { 200: Project } } },
     async (req) => {
       const { version, ...fields } = req.body;
-      return toDto(
+      return toProjectDto(
         await db.transaction(async (tx) => {
           const [current] = await tx.select().from(projects).where(active(req.params.id)).for('update');
           if (!current) throw notFound('A projekt nem található');
@@ -127,7 +127,7 @@ export async function projectRoutes(app: FastifyInstance, opts: { db: Db }): Pro
     '/api/projects/:id/events',
     { schema: { params: IdParams, querystring: EventListQuery, response: { 200: EventList } } },
     async (req) => {
-      await getActive(db, req.params.id);
+      await getActiveProject(db, req.params.id);
       return { items: await listProjectEvents(db, req.params.id, req.query.limit) };
     },
   );

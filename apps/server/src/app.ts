@@ -7,19 +7,40 @@ import type { Config } from './core/config.ts';
 import { createDb } from './core/db.ts';
 import { HttpError } from './core/errors.ts';
 import { healthRoutes } from './core/health.ts';
+import { createModuleContext, moduleListRoutes } from './core/module-host.ts';
+import { loadModules, MODULES_DIR, type LoadedModule } from './core/modules.ts';
 import { projectRoutes } from './core/projects.ts';
 import { staticRoutes, WEB_DIST } from './core/static.ts';
+import { EventHub, PING_MS, streamRoutes } from './core/stream.ts';
 
 export interface AppOptions {
   config: Config;
   pool: pg.Pool;
   logger?: boolean;
   webRoot?: string | null;
+  /** A modulok könyvtára (tesztben felülírható). */
+  modulesDir?: string;
+  /** Az SSE-ping gyakorisága (tesztben rövidebb). */
+  streamPingMs?: number;
 }
 
-export async function buildApp({ config, pool, logger = true, webRoot = WEB_DIST }: AppOptions): Promise<FastifyInstance> {
+export async function buildApp({
+  config,
+  pool,
+  logger = true,
+  webRoot = WEB_DIST,
+  modulesDir = MODULES_DIR,
+  streamPingMs = PING_MS,
+}: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: logger ? { level: config.nodeEnv === 'test' ? 'warn' : 'info' } : false });
   const db = createDb(pool);
+  const modules: LoadedModule[] = await loadModules(config.modules, modulesDir);
+  app.log.info({ modules: modules.map((m) => m.manifest.id) }, 'bekapcsolt modulok');
+
+  const hub = new EventHub(db, config.databaseUrl, app.log);
+  await hub.start();
+  app.addHook('preClose', async () => hub.closeStreams());
+  app.addHook('onClose', async () => hub.stop());
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
@@ -46,7 +67,17 @@ export async function buildApp({ config, pool, logger = true, webRoot = WEB_DIST
   await app.register(async (protectedScope) => {
     protectedScope.addHook('preHandler', requireUser);
     await protectedScope.register(projectRoutes, { db });
+    await protectedScope.register(moduleListRoutes, { modules });
+    await protectedScope.register(streamRoutes, { db, hub, pingMs: streamPingMs });
+    for (const m of modules) {
+      const { routes } = m.manifest;
+      if (routes) await protectedScope.register(async (scope) => routes(scope, createModuleContext(m, db, pool, config)));
+    }
   });
+  for (const m of modules) {
+    const { publicRoutes } = m.manifest;
+    if (publicRoutes) await app.register(async (scope) => publicRoutes(scope, createModuleContext(m, db, pool, config)));
+  }
   if (webRoot) await app.register(staticRoutes, { root: webRoot });
 
   return app;

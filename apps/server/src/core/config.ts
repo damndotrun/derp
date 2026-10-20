@@ -1,4 +1,22 @@
 import { z } from 'zod';
+import { ModuleId } from '@derp/shared';
+import type { ModuleSelection } from './modules.ts';
+
+/** `DERP_MODULES`: `*` = minden modul, üres = egyik sem, különben vesszővel elválasztott azonosítók. */
+export const DerpModules = z
+  .string()
+  .default('*')
+  .transform((v, ctx): ModuleSelection => {
+    if (v.trim() === '*') return '*';
+    const ids = v
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (const id of ids) {
+      if (!ModuleId.safeParse(id).success) ctx.addIssue({ code: 'custom', message: `érvénytelen modulazonosító: „${id}”` });
+    }
+    return ids;
+  });
 
 const EnvSchema = z
   .object({
@@ -8,6 +26,9 @@ const EnvSchema = z
       .refine((s) => Buffer.byteLength(s, 'utf8') >= 32, 'SESSION_SECRET legalább 32 bájt legyen'),
     PUBLIC_BASE_URL: z.url().default('http://localhost:8080'),
     DEV_LOGIN: z.enum(['0', '1']).default('0'),
+    DERP_MODULES: DerpModules,
+    // A konténeren belül mindig 8080; a második e2e-szerver (kikapcsolt modulokkal) miatt állítható.
+    PORT: z.coerce.number().int().min(1).max(65535).default(8080),
     NODE_ENV: z.enum(['production', 'development', 'test']).default('production'),
     TZ_DISPLAY: z
       .string()
@@ -33,6 +54,8 @@ export interface Config {
   devLogin: boolean;
   nodeEnv: 'production' | 'development' | 'test';
   tzDisplay: string;
+  modules: ModuleSelection;
+  port: number;
 }
 
 export class ConfigError extends Error {}
@@ -51,5 +74,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     devLogin: e.DEV_LOGIN === '1',
     nodeEnv: e.NODE_ENV,
     tzDisplay: e.TZ_DISPLAY,
+    modules: e.DERP_MODULES,
+    port: e.PORT,
   };
 }

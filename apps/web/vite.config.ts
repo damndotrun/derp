@@ -15,6 +15,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
-    include: ['src/**/*.test.{ts,tsx}'],
+    // A mag és a modulok kliens oldali tesztjei (`modules/<id>/web/**/*.test.tsx`).
+    include: ['src/**/*.test.{ts,tsx}', '../../modules/*/web/**/*.test.{ts,tsx}'],
   },
 });

@@ -1,4 +1,13 @@
-import type { EventList, Project, ProjectCreate, ProjectList, ProjectUpdate, SessionInfo, User } from '@derp/shared';
+import type {
+  EventList,
+  ModuleList,
+  Project,
+  ProjectCreate,
+  ProjectList,
+  ProjectUpdate,
+  SessionInfo,
+  User,
+} from '@derp/shared';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -11,7 +20,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
+export async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, {
     method,
     credentials: 'same-origin',
@@ -29,6 +38,7 @@ export const api = {
   session: () => request<SessionInfo>('GET', '/api/session'),
   devLogin: (email: string) => request<{ user: User }>('POST', '/api/dev-login', { email }),
   logout: () => request<void>('POST', '/api/logout'),
+  modules: () => request<ModuleList>('GET', '/api/modules'),
   projects: () => request<ProjectList>('GET', '/api/projects'),
   project: (id: string) => request<Project>('GET', `/api/projects/${id}`),
   createProject: (body: ProjectCreate) => request<Project>('POST', '/api/projects', body),

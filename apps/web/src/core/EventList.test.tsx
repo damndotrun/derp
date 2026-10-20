@@ -37,6 +37,20 @@ describe('EventList', () => {
     expect(items[0]).not.toHaveTextContent('·');
   });
 
+  it('az eseménytípus megjelenítőjét a modul adja, ha van', () => {
+    const Custom = ({ event }: { event: TimelineEvent }) => <p>egyedi: {event.title}</p>;
+    render(
+      <EventList
+        events={[event({ type: 'alpha.done', title: 'Kész' }), event({})]}
+        timeZone="Europe/Budapest"
+        renderers={{ 'alpha.done': Custom }}
+      />,
+    );
+    const items = screen.getAllByRole('listitem');
+    expect(items[0]).toHaveTextContent('egyedi: Kész');
+    expect(items[1]).toHaveTextContent('Projekt létrehozva');
+  });
+
   it('üres listánál jelzi, hogy nincs esemény', () => {
     render(<EventList events={[]} timeZone="Europe/Budapest" />);
     expect(screen.getByText('Még nincs esemény.')).toBeInTheDocument();
