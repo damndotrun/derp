@@ -1,5 +1,5 @@
 # dERP — moduláris céges ügyviteli rendszer, 1. fázis
-Verzió: 4 · 2026-10-20 · Állapot: jóváhagyva
+Verzió: 5 · 2026-10-20 · Állapot: jóváhagyva
 
 ## Cél és kész-feltétel
 
@@ -73,6 +73,15 @@ levél küldése a rendszerből; natív mobilapp; éles telepítés a cég Synol
 - **Fejlesztői környezet:** a tesztek a `DATABASE_URL`-ben megadott PostgreSQL 16-ra csatlakoznak. Ha a munkamenetben
   van Docker, `pnpm db:up` indít egy Postgres konténert; ha nincs, a munkamenetben helyben telepített PostgreSQL 16 is
   megfelel. Docker nélküli munkamenetben a compose-ellenőrzés a 13. munkacsomagra marad, és a jelentés ezt kimondja.
+  Ha a felhős munkamenetben a Docker Hub 429-et ad, a képek a `mirror.gcr.io`-ról húzhatók; a repóban a szokásos
+  képnév (`postgres:16-alpine`, `node:22-alpine`) marad.
+- **Az 1. munkacsomag óta rögzített megoldások** (jelentés: `/mnt/project-files/specs/derp/jelentesek/01-vaz.md`): a
+  szerver TypeScriptje build nélkül fut (Node 22.18+ típuslehántás), így a `modules/*/manifest.ts` futásidőben
+  betölthető; a migrációs keret forráslistát vár (mag, utána a modulok); az `events` táblát trigger védi a módosítástól;
+  a törlés rejtés (`deleted_at`); a szerkesztés verziószámmal megy, eltérésnél 409; a munkamenet-végpontok
+  `GET /api/session` és `POST /api/logout`; a konténeren belüli port 8080; az app indításkor migrál, a frissítés előtti
+  `pg_dump` a telepítő szkript dolga; a kliens útválasztója `react-router` 7, a felületi alap a shadcn (cva, clsx,
+  tailwind-merge), a kliens tesztjei Testing Library + jsdom.
 
 ## Felépítés és fájltulajdonlás
 
@@ -248,3 +257,5 @@ Előfeltétel: az `e2e` compose-profil fut (tiszta `derp_e2e` adatbázis, `NODE_
   e2e-tesztek fájltulajdonlása; a 13. csak `deploy/**` alá ír.
 - v4 2026-10-20: jóváhagyva. A repó (`damndotrun/derp`) létrejött; a NAS-olvasás felhős munkamenetből a `nas` skill
   HTTPS-végpontján át is mehet, minden írás és a Cloudflare/Google-beállítás helyi munkamenetben.
+- v5 2026-10-20: az 1. munkacsomag (próba) jelentése alapján a Kontextusba kerültek az ott hozott megoldások és a
+  Docker Hub tükör.
