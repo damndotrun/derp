@@ -1,5 +1,5 @@
 # dERP — moduláris céges ügyviteli rendszer, 1. fázis
-Verzió: 4 · 2026-10-20 · Állapot: jóváhagyva
+Verzió: 6 · 2026-10-20 · Állapot: jóváhagyva
 
 ## Cél és kész-feltétel
 
@@ -55,7 +55,7 @@ levél küldése a rendszerből; natív mobilapp; éles telepítés a cég Synol
   tárhely: Synology DS220+ (később cél-szerver). Felhasználók: kb. 5–30 fő; irodai PC és terepen Android/iPhone.
 - **Fejlesztői szerver:** plasticgarden NAS (Asustor AS6602T, Celeron J4125, 32 GB RAM, TrueNAS SCALE 25.10). Saját
   konténerek „Custom App”-ként futnak (`compose.yaml` + `app.update`, nincs Roll Back); minta: `utemezo-api`. Saját adat
-  a `Tank` poolon (`/mnt/Tank/data/...`). Publikus elérés kizárólag Cloudflare Tunnel (+ Access) útján, portnyitás
+  a `Tank` poolon; a dERP saját datasetjei a `Tank/derp/` alatt vannak (nem a `Tank/data` alatt, mert azt egy SMB-share teljesen fedi). Publikus elérés kizárólag Cloudflare Tunnel (+ Access) útján, portnyitás
   nincs. Új dataset automatikusan a szülő rekurzív snapshot-taskjába kerül; titok olyan datasetre, amit SMB-share nem
   fed. A NAS-on írni (dataset, Custom App, mount, cron), valamint a Cloudflare- és Google Cloud-beállításokat elvégezni
   csak a felhasználó gépén futó helyi munkamenet tud, a `nas` skill szerint. Olvasásra (állapot, naplók, mérés) a felhős
@@ -68,11 +68,28 @@ levél küldése a rendszerből; natív mobilapp; éles telepítés a cég Synol
   ott sincs kész.
 - **Meglévő ütemező:** `utemezo` (Google Naptár + Chrome-bővítmény, `utemezo-api` a NAS-on). Ebben a fázisban nem
   integráljuk.
+- **A NAS-előkészítés eredménye (13. munkacsomag első fele, kész):** datasetek `Tank/derp/{db,files,backup,secrets,watch-test}`
+  (a `db` kizárva a snapshot-taskból, a replikáció hibamentes; a `/mnt/Tank/derp/db` még root tulajdonú, telepítéskor a
+  Postgres-konténer UID-jára kell állítani); host-port: `app` → 30080 (a Tunnel innen éri el:
+  `derp.damndot.run` → `http://192.168.1.63:30080`), `app-e2e` → `127.0.0.1:30081`; a `secrets/.env` (600) tartalmazza
+  a `GOOGLE_LOGIN_CLIENT_ID` / `_SECRET` értékét. Cloudflare Access: „dERP” alkalmazás 720 órás munkamenettel, egyelőre
+  a meglévő „Only me” szabállyal (csak a felhasználó), mert a Cloudflare-fiókban nincs Google-identitásszolgáltató;
+  „dERP ICS feed” Bypass a `/api/ics/*`-ra. Google Cloud projekt: `derp-512213`, „dERP login” webes kliens (External,
+  Production állapotban). A `dokakft.hu` Google Workspace.
 - **Repó:** új, privát `damndotrun/derp` (a felhasználó hozza létre). Munka ágakon, PR-ral; merge csak a felhasználó
   jóváhagyásával.
 - **Fejlesztői környezet:** a tesztek a `DATABASE_URL`-ben megadott PostgreSQL 16-ra csatlakoznak. Ha a munkamenetben
   van Docker, `pnpm db:up` indít egy Postgres konténert; ha nincs, a munkamenetben helyben telepített PostgreSQL 16 is
   megfelel. Docker nélküli munkamenetben a compose-ellenőrzés a 13. munkacsomagra marad, és a jelentés ezt kimondja.
+  Ha a felhős munkamenetben a Docker Hub 429-et ad, a képek a `mirror.gcr.io`-ról húzhatók; a repóban a szokásos
+  képnév (`postgres:16-alpine`, `node:22-alpine`) marad.
+- **Az 1. munkacsomag óta rögzített megoldások** (jelentés: `/mnt/project-files/specs/derp/jelentesek/01-vaz.md`): a
+  szerver TypeScriptje build nélkül fut (Node 22.18+ típuslehántás), így a `modules/*/manifest.ts` futásidőben
+  betölthető; a migrációs keret forráslistát vár (mag, utána a modulok); az `events` táblát trigger védi a módosítástól;
+  a törlés rejtés (`deleted_at`); a szerkesztés verziószámmal megy, eltérésnél 409; a munkamenet-végpontok
+  `GET /api/session` és `POST /api/logout`; a konténeren belüli port 8080; az app indításkor migrál, a frissítés előtti
+  `pg_dump` a telepítő szkript dolga; a kliens útválasztója `react-router` 7, a felületi alap a shadcn (cva, clsx,
+  tailwind-merge), a kliens tesztjei Testing Library + jsdom.
 
 ## Felépítés és fájltulajdonlás
 
@@ -168,7 +185,7 @@ Párhuzamosíthatónak csak az van jelölve, ami a fenti fájltulajdonlás szeri
 | --- | --- | --- | --- | --- |
 | 1 | **Váz (próba):** pnpm monorepo a fenti szerkezettel, Vitest és Playwright, `deploy/compose.yaml` (app + db), Dockerfile, migrációs keret, `DEV_LOGIN` + `pnpm seed:e2e` egy admin felhasználóval, projektek CRUD (ügyfél egyelőre szöveges mező), `events` tábla, `GET /api/projects/:id/events`, `GET /api/health`, egyszerű projektlista és projekt-adatlap az eseménylistával | – | – | `pnpm test`; `curl -f localhost:8080/api/health` (compose-on, ha van Docker, különben a dev szerveren); Playwright: dev-login → projekt létrehozása → az adatlapon „Projekt létrehozva” esemény |
 | 2a | **Modulkeret:** modulbetöltő és manifest-típus (menüpont, útvonalak, eseménymegjelenítő, `seedE2E`, i18n), `GET /api/modules`, egy `example` minta-modul, SSE-csatorna `LISTEN/NOTIFY`-jal, pingeléssel, `Last-Event-ID`-vel, a többi függőség a lockfile-ba, reszponzív elrendezés és menü, i18n-összefűzés | 1 | – | `pnpm test`; Playwright: a minta-modul menüpontja megjelenik és eltűnik a `DERP_MODULES` szerint; a minta-modul eseménye SSE-n újratöltés nélkül megjelenik |
-| 2b | **Felhasználók és jogosultság:** felhasználók és szerepkörök (admin felület), terepes-szűrés minden projekt-végponton, ügyfelek és kapcsolattartók (a szöveges mező kiváltása migrációval), auditnapló (ki, mikor, mit nézett meg vagy módosított), a `seed:e2e` három felhasználóval, Google OIDC belépés megírva (élesítés a 13.-ban) | 2a | – | `pnpm test`; Playwright: terepes felhasználó 403-at kap nem hozzá rendelt projektre; ügyfél + kapcsolattartó felvétele; az auditnaplóban ott a megtekintés |
+| 2b | **Felhasználók és jogosultság:** felhasználók és szerepkörök (admin felület), terepes-szűrés minden projekt-végponton, ügyfelek és kapcsolattartók (a szöveges mező kiváltása migrációval), auditnapló (ki, mikor, mit nézett meg vagy módosított), a `seed:e2e` három felhasználóval, Google OIDC belépés megírva (élesítés a 13.-ban), nyilvános adatvédelmi oldal a `/adatvedelem` útvonalon (a Google OAuth-márkaoldal erre hivatkozik; belépés nélkül elérhető) | 2a | – | `pnpm test`; Playwright: terepes felhasználó 403-at kap nem hozzá rendelt projektre; ügyfél + kapcsolattartó felvétele; az auditnaplóban ott a megtekintés |
 | 3 | **Idővonal:** összecsukható napi/heti csoportok, típus szerinti csoportosítás és szűrés, „mindet kibont / összecsuk”, eseménytípusonkénti megjelenítő a manifestből (alapértelmezett megjelenítővel), végtelen görgetés, élő frissítés SSE-vel | 2b | 4, 6, 9 | Vitest a csoportosításra (időzóna-határ, nyári időszámítás váltása, hétfői hétkezdés); Playwright: 30 esemény → csoport összecsuk/kibont, szűrő, új esemény újratöltés nélkül megjelenik |
 | 4 | **Dokumentumtár** (`docs` modul): feltöltés (több fájl, húzd-és-ejtsd, telefonon kamera), projektmappák, bélyegkép, előnézet, letöltés, törlés jogosultsággal, blob-hivatkozásszámlálás, esemény az idővonalra | 2b | 3, 6, 9 | Vitest: hash-útvonal, duplikáció, blob törlése csak az utolsó hivatkozás után; Playwright: 3 fotó feltöltése → bélyegképek → esemény az eseménylistában |
 | 5 | **Jegyzet és felmérés** (`notes` modul): szabad szöveges helyszíni jegyzet; felmérés kötelező mezőkkel (helyszín, észlelt állapot, javasolt munka, becsült anyag tételesen) és csatolt fotókkal (a `docs` modulon át); online űrlap; kliens UUID-val idempotens létrehozás; esemény az idővonalra | 3, 4 | 6, 9 | Vitest: kötelező mezők, ugyanazzal a UUID-val kétszer küldve egy rekord; Playwright: felmérés 2 fotóval → az idővonalon egy csoportban |
@@ -179,8 +196,8 @@ Párhuzamosíthatónak csak az van jelölve, ami a fenti fájltulajdonlás szeri
 | 10 | **Árajánlat** (`quotes` modul): ajánlatszerkesztő (tételek a cikktörzsből vagy kézzel, mennyiség, kedvezmény, nettó/ÁFA/bruttó, megjegyzés, érvényesség), verziók, PDF, kézi státusz (tervezet / kiküldve / elfogadva / elutasítva), oldalpanelen a projekt idővonala, fotói és felmérései, esemény az idővonalra | 3, 4, 5, 9 | 8, 11, 12 | Vitest: összegzés és kerekítés, ÁFA-kulcsonkénti bontás; a PDF szövegét kinyerve a végösszeg egyezik; Playwright: felmérés mellett ajánlat szerkesztése → PDF letölthető |
 | 11 | **Gmail, mock-forrással** (`gmail` modul): `MailSource` interfész, mock-forrás fixture-ökkel, a `classify.js` és tesztjei portolva, szabályszerkesztő, „Hozzárendeletlen levelek” lista, szál ↔ projekt hozzárendelés, levélesemények az idővonalon (kibontva a törzs és a csatolmánylista), `historyId`-elévülés kezelése a mock-forráson szimulálva | 3 | 7, 8, 9, 10, 12 | Vitest: a portolt osztályozó tesztek zöldek; elévült `historyId` → újrabetöltés duplikáció nélkül; Playwright mock-forrással: szál hozzárendelése → megjelenik az idővonalon |
 | 12 | **Mappafigyelő** (`watch` modul): figyelt gyökér, projekt ↔ almappa hozzárendelés, ütemezett bejárás és kézi „Most ellenőrizd” gomb, új/módosult/törölt/átnevezett események, fájl letöltése a felületről | 3 | 7, 8, 9, 10, 11 | Vitest ideiglenes könyvtárral (létrehoz, módosít, töröl, átnevez → helyes események); 10 000 fájl bejárása 60 s alatt |
-| 13 | **Első NAS-telepítés és Google-belépés:** helyi munkamenetben (a felhasználó gépén) mérés a `nas` skill szerint (szabad hely, RAM, portok, futó appok); datasetek `Tank/data/derp/{db,files,backup,secrets,watch-test}` (`db` kizárva a snapshotból, mert a `pg_dump` menti; a `secrets` 700/600 és SMB-share nem fedi); Custom App a `deploy/compose.yaml`-lal; `derp.damndot.run` Tunnel + Access + `/api/ics/*` Bypass; Google belépési OAuth-kliens bekötése és élesítése; visszaírás a host-doksikba. Csak `deploy/**` és `docs/**` alá ír | 2b (az 1–2b. állapotával telepít; később bármikor frissíthető) | 3–12 | `curl -f https://derp.damndot.run/api/health` Access-szel; `curl` Access-süti nélkül a `/api/ics/<token>.ics`-re 200; belépés valódi Google-fiókkal; `docker stats --no-stream` < 600 MB; `sudo midclt call replication.query` hibamentes; a host `NAS-allapot.md` §1/§2 és `NAS-naplo.md` frissítve |
-| 14 | **Gmail élő bekötése:** a felhasználóval megállapítani, hogy a `dokakft.hu` Workspace-e, és ennek megfelelő Gmail OAuth-kliens; bekötés az adminfelületen; `GmailSource` (`history.list`, elévülés-kezelés); egy céges fiók 90 napos betöltése a NAS-példányon | 11, 13 | 15 előtt bármikor | Vitest a `GmailSource`-ra rögzített API-válaszokkal; élő próba: egy fiók betöltve, a hozzárendeletlen levelek listája nem üres, egy szál projekthez rendelve az idővonalon |
+| 13 | **Első NAS-telepítés és Google-belépés:** helyi munkamenetben (a felhasználó gépén) mérés a `nas` skill szerint (szabad hely, RAM, portok, futó appok); datasetek `Tank/derp/{db,files,backup,secrets,watch-test}` (mountok: `/mnt/Tank/derp/...`) (`db` kizárva a snapshotból, mert a `pg_dump` menti; a `secrets` 700/600 és SMB-share nem fedi); Custom App a `deploy/compose.yaml`-lal; `derp.damndot.run` Tunnel + Access + `/api/ics/*` Bypass; a `/mnt/Tank/derp/db` tulajdonosa a Postgres-konténer UID-ja; Access Bypass a `/adatvedelem`-re is; visszaírás a host-doksikba. Csak `deploy/**` és `docs/**` alá ír | 2b (az 1–2b. állapotával telepít; később bármikor frissíthető) | 3–12 | `curl -f https://derp.damndot.run/api/health` Access-szel; `curl` Access-süti nélkül a `/api/ics/<token>.ics`-re 200; belépés valódi Google-fiókkal; `docker stats --no-stream` < 600 MB; `sudo midclt call replication.query` hibamentes; a host `NAS-allapot.md` §1/§2 és `NAS-naplo.md` frissítve |
+| 14 | **Gmail élő bekötése:** a `dokakft.hu` Workspace, ezért belső (Internal) típusú Gmail OAuth-kliens a `derp-512213` projektben (ehhez Workspace-admin jog kell, a felhasználóval ellenőrizni); bekötés az adminfelületen; `GmailSource` (`history.list`, elévülés-kezelés); egy céges fiók 90 napos betöltése a NAS-példányon | 11, 13 | 15 előtt bármikor | Vitest a `GmailSource`-ra rögzített API-válaszokkal; élő próba: egy fiók betöltve, a hozzárendeletlen levelek listája nem üres, egy szál projekthez rendelve az idővonalon |
 | 15 | **Végső telepítés és visszaállítási próba:** a teljes 1–14. állapot a NAS-on, `pg_dump` a frissítés előtt; mentés ellenőrzése és visszaállítás egy ideiglenes adatbázisba | 1–14 | – | friss dump a `backup` könyvtárban; `pg_restore` ideiglenes adatbázisba, és a `SELECT count(*) FROM events` egyezik az élővel; host-doksik frissítve |
 | 16 | **Végponttól végpontig tartó ellenőrzés:** a lenti forgatókönyv Playwright-tesztként (`pnpm e2e`, az `e2e/` alatt), asztali és Pixel 7 projekttel. Futtatás a helyi compose `e2e` profilján, majd a NAS-on: a felhasználó gépén futó helyi munkamenet elindítja az `e2e` profilt, `ssh -L 8081:127.0.0.1:<app-e2e port>` porttovábbítással `E2E_BASE_URL=http://localhost:8081`-re futtat, utána leállítja a profilt és törli a `derp_e2e` adatbázist | 1–12, 15 | – | `pnpm e2e` zöld mindkét helyen, HTML-riport és képernyőképek mentve; a NAS-on az `app-e2e` konténer a futás után nem fut |
 
@@ -215,6 +232,9 @@ Előfeltétel: az `e2e` compose-profil fut (tiszta `derp_e2e` adatbázis, `NODE_
 **Kockázatok:**
 - iOS Safari PWA: nincs Background Sync, és a tárhely hosszabb inaktivitás után törölhető. Kezelés: szinkron
   app-megnyitáskor, figyelmeztetés szinkronizálatlan elemre.
+- A Cloudflare Access ma csak a felhasználót engedi be. Mielőtt kollégák (terepen is) használnák a fejlesztői példányt, a
+  Cloudflare-fiókba Google-identitásszolgáltató vagy e-mailes egyszeri kód kell, és az Access-szabályt bővíteni kell
+  (a felhasználó lépése, helyi szálban).
 - Cloudflare Access munkamenet lejárta terepen, offline sorral: a kliens a sort megtartja és belépést kér (8.).
 - DS220+ 2 GB RAM: a memóriakorlátok ehhez vannak szabva; az éles telepítés előtt ajánlott a 6 GB-ra bővítés.
 - Ha a `dokakft.hu` nem Workspace, a Gmail-bekötéskor „ellenőrizetlen alkalmazás” figyelmeztetés jelenik meg; ez
@@ -248,3 +268,8 @@ Előfeltétel: az `e2e` compose-profil fut (tiszta `derp_e2e` adatbázis, `NODE_
   e2e-tesztek fájltulajdonlása; a 13. csak `deploy/**` alá ír.
 - v4 2026-10-20: jóváhagyva. A repó (`damndotrun/derp`) létrejött; a NAS-olvasás felhős munkamenetből a `nas` skill
   HTTPS-végpontján át is mehet, minden írás és a Cloudflare/Google-beállítás helyi munkamenetben.
+- v5 2026-10-20: az 1. munkacsomag (próba) jelentése alapján a Kontextusba kerültek az ott hozott megoldások és a
+  Docker Hub tükör.
+- v6 2026-10-20: a NAS- és Cloudflare-előkészítés eredménye: datasetek a `Tank/derp` alatt, portok 30080/30081, Access
+  egyelőre csak a felhasználónak, `dokakft.hu` Workspace (Gmail: belső kliens), nyilvános `/adatvedelem` oldal (2b),
+  Postgres-UID a 13. második felében; a Google belépési alkalmazás Production állapotban.
