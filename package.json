@@ -1,0 +1,26 @@
+{
+  "name": "derp",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @derp/server --filter @derp/web dev",
+    "build": "pnpm --filter @derp/web build",
+    "start": "pnpm --filter @derp/server start",
+    "migrate": "pnpm --filter @derp/server migrate",
+    "seed:e2e": "pnpm --filter @derp/server seed:e2e",
+    "test": "pnpm -r --workspace-concurrency=1 test",
+    "typecheck": "pnpm -r typecheck",
+    "e2e": "playwright test",
+    "db:up": "docker start derp-dev-db 2>/dev/null || docker run -d --name derp-dev-db -p 127.0.0.1:5432:5432 -e POSTGRES_USER=derp -e POSTGRES_PASSWORD=derp -e POSTGRES_DB=derp postgres:16-alpine",
+    "db:down": "docker rm -f derp-dev-db"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^22.19.0",
+    "typescript": "~5.9.3"
+  }
+}
