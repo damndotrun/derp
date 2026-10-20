@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { api } from './api.ts';
 import { t, translate } from './i18n.ts';
 import { useModules } from './modules.ts';
-import { useSession } from './session.ts';
+import { isAdmin, isOffice, useSession, useUser } from './session.ts';
 import { useEventStream } from './stream.ts';
 
 export function Layout() {
@@ -24,12 +24,23 @@ interface MenuItem {
   label: string;
 }
 
-/** A mag menüpontjai, utána a bekapcsolt modulok menüpontjai a `GET /api/modules` sorrendjében. */
+/**
+ * A mag menüpontjai, utána a bekapcsolt modulok menüpontjai a `GET /api/modules` sorrendjében, végül az admin
+ * menüpontjai. Az ügyfelek az irodai szerepköröknek, a felhasználók és az auditnapló csak az adminnak látszik.
+ */
 export function useMenuItems(): MenuItem[] {
   const modules = useModules();
+  const user = useUser();
   return [
     { path: '/projects', label: t('nav.projects') },
+    ...(isOffice(user) ? [{ path: '/clients', label: t('nav.clients') }] : []),
     ...(modules.data?.items ?? []).flatMap((m) => m.menu.map((i) => ({ path: i.path, label: translate(i.labelKey) }))),
+    ...(isAdmin(user)
+      ? [
+          { path: '/admin/users', label: t('nav.users') },
+          { path: '/admin/audit', label: t('nav.audit') },
+        ]
+      : []),
   ];
 }
 

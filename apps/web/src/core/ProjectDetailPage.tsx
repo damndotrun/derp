@@ -6,15 +6,21 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { api, ApiError } from './api.ts';
+import { Select } from '@/components/ui/select';
+import { api } from './api.ts';
+import { ClientSelect } from './ClientSelect.tsx';
+import { ContactList } from './ContactList.tsx';
 import { EventList } from './EventList.tsx';
 import { formatDateTime } from './format.ts';
 import { t } from './i18n.ts';
-import { useSession } from './session.ts';
+import { LoadError } from './LoadError.tsx';
+import { isOffice, useSession, useUser } from './session.ts';
 
 export function ProjectDetailPage() {
   const { id = '' } = useParams();
   const session = useSession();
+  const user = useUser();
+  const office = isOffice(user);
   const tz = session.data?.tzDisplay ?? 'Europe/Budapest';
   const project = useQuery({ queryKey: ['projects', id], queryFn: () => api.project(id), retry: false });
   const events = useQuery({
@@ -26,14 +32,13 @@ export function ProjectDetailPage() {
 
   if (project.isPending) return <p>{t('common.loading')}</p>;
   if (project.isError) {
-    const notFound = project.error instanceof ApiError && project.error.status === 404;
     return (
-      <div className="flex flex-col gap-2">
-        <p className={notFound ? '' : 'text-destructive'}>{notFound ? t('projects.notFound') : project.error.message}</p>
-        <Link to="/projects" className="text-sm underline">
-          {t('projects.back')}
-        </Link>
-      </div>
+      <LoadError
+        error={project.error}
+        notFound={t('projects.notFound')}
+        forbidden={t('projects.forbidden')}
+        back={{ to: '/projects', label: t('projects.back') }}
+      />
     );
   }
 
@@ -47,14 +52,31 @@ export function ProjectDetailPage() {
         <CardHeader>
           <h1 className="text-2xl font-semibold">{p.name}</h1>
           <p className="text-sm text-muted-foreground">
-            {p.clientName && <>{p.clientName} · </>}
+            {p.client && (
+              <>
+                {office ? (
+                  <Link to={`/clients/${p.client.id}`} className="underline">
+                    {p.client.name}
+                  </Link>
+                ) : (
+                  p.client.name
+                )}{' '}
+                ·{' '}
+              </>
+            )}
             {t('projects.createdAt')}: {formatDateTime(p.createdAt, tz)}
           </p>
         </CardHeader>
-        <CardContent>
-          {editing ? <EditForm project={p} onDone={() => setEditing(false)} /> : <Actions project={p} onEdit={() => setEditing(true)} />}
-        </CardContent>
+        {office && (
+          <CardContent>
+            {editing ? <EditForm project={p} onDone={() => setEditing(false)} /> : <Actions project={p} onEdit={() => setEditing(true)} />}
+          </CardContent>
+        )}
       </Card>
+      <div className="grid gap-4 md:grid-cols-2">
+        {p.client && <ClientContacts clientId={p.client.id} />}
+        <Members projectId={p.id} canEdit={office} />
+      </div>
       <Card>
         <CardHeader>
           <CardTitle>{t('events.title')}</CardTitle>
@@ -66,6 +88,102 @@ export function ProjectDetailPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+/** Az ügyfél kapcsolattartói (a terepes is látja a hozzá rendelt projekt ügyfelének elérhetőségét). */
+function ClientContacts({ clientId }: { clientId: string }) {
+  const client = useQuery({ queryKey: ['clients', clientId], queryFn: () => api.client(clientId) });
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('projects.contacts')}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {client.isPending && <p>{t('common.loading')}</p>}
+        {client.isError && <p className="text-destructive">{client.error.message}</p>}
+        {client.data && (
+          <div className="flex flex-col gap-2">
+            {client.data.address && <p className="text-sm">{client.data.address}</p>}
+            <ContactList contacts={client.data.contacts} />
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function Members({ projectId, canEdit }: { projectId: string; canEdit: boolean }) {
+  const queryClient = useQueryClient();
+  const key = ['projects', projectId, 'members'];
+  const members = useQuery({ queryKey: key, queryFn: () => api.projectMembers(projectId) });
+  const users = useQuery({ queryKey: ['users'], queryFn: api.users, enabled: canEdit });
+  const [userId, setUserId] = useState('');
+  const refresh = () => queryClient.invalidateQueries({ queryKey: key });
+  const add = useMutation({
+    mutationFn: (uid: string) => api.addMember(projectId, uid),
+    onSuccess: async () => {
+      setUserId('');
+      await refresh();
+    },
+  });
+  const remove = useMutation({ mutationFn: (uid: string) => api.removeMember(projectId, uid), onSuccess: refresh });
+
+  const memberIds = new Set(members.data?.items.map((m) => m.id));
+  const candidates = (users.data?.items ?? []).filter((u) => u.active && !memberIds.has(u.id));
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (userId) add.mutate(userId);
+  };
+  const error = add.error ?? remove.error;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('projects.members')}</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {members.isPending && <p>{t('common.loading')}</p>}
+        {members.data?.items.length === 0 && <p className="text-sm text-muted-foreground">{t('projects.membersEmpty')}</p>}
+        <ul aria-label={t('projects.members')} className="flex flex-col gap-1">
+          {members.data?.items.map((m) => (
+            <li key={m.id} className="flex items-center justify-between gap-2">
+              <span>
+                {m.name} <span className="text-sm text-muted-foreground">({t(`role.${m.role}`)})</span>
+              </span>
+              {canEdit && (
+                <Button variant="ghost" size="sm" disabled={remove.isPending} onClick={() => remove.mutate(m.id)}>
+                  {t('projects.unassign')}
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+        {canEdit && (
+          <form onSubmit={submit} className="flex items-end gap-2">
+            <div className="flex flex-1 flex-col gap-1.5">
+              <Label htmlFor="member-user">{t('projects.addMember')}</Label>
+              <Select id="member-user" value={userId} onChange={(e) => setUserId(e.target.value)}>
+                <option value="">–</option>
+                {candidates.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} ({t(`role.${u.role}`)})
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <Button type="submit" variant="outline" disabled={!userId || add.isPending}>
+              {t('projects.assign')}
+            </Button>
+          </form>
+        )}
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error.message}
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -99,9 +217,9 @@ function Actions({ project, onEdit }: { project: Project; onEdit: () => void }) 
 function EditForm({ project, onDone }: { project: Project; onDone: () => void }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState(project.name);
-  const [clientName, setClientName] = useState(project.clientName);
+  const [clientId, setClientId] = useState(project.client?.id ?? '');
   const save = useMutation({
-    mutationFn: () => api.updateProject(project.id, { version: project.version, name, clientName }),
+    mutationFn: () => api.updateProject(project.id, { version: project.version, name, clientId: clientId || null }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['projects'] });
       onDone();
@@ -119,7 +237,7 @@ function EditForm({ project, onDone }: { project: Project; onDone: () => void })
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="edit-client">{t('projects.client')}</Label>
-        <Input id="edit-client" value={clientName} onChange={(e) => setClientName(e.target.value)} />
+        <ClientSelect id="edit-client" value={clientId} onChange={setClientId} />
       </div>
       {save.error && (
         <p role="alert" className="text-sm text-destructive sm:col-span-2">

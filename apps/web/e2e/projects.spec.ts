@@ -10,7 +10,6 @@ test('dev-login → projekt létrehozása → „Projekt létrehozva” esemény
 
   const name = `Minta Kft. – légtechnika felmérés (${testInfo.project.name} ${Date.now()})`;
   await page.getByLabel('Projekt neve').fill(name);
-  await page.getByLabel('Ügyfél').fill('Minta Kft.');
   await page.getByRole('button', { name: 'Projekt létrehozása' }).click();
 
   await expect(page).toHaveURL(/\/projects\/[0-9a-f-]{36}$/);

@@ -3,7 +3,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ModuleInfo } from '@derp/shared';
+import type { ModuleInfo, Role } from '@derp/shared';
 import { Layout } from './Layout.tsx';
 
 const example: ModuleInfo = {
@@ -14,13 +14,18 @@ const example: ModuleInfo = {
   permissions: ['example.ping'],
 };
 
-function renderLayout(modules: ModuleInfo[]) {
+function renderLayout(modules: ModuleInfo[], role: Role = 'admin') {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) => {
       const body =
         url === '/api/session'
-          ? { user: { id: crypto.randomUUID(), email: 'a@derp.test', name: 'Admin Ádám', role: 'admin' }, devLogin: true, tzDisplay: 'Europe/Budapest' }
+          ? {
+              user: { id: crypto.randomUUID(), email: 'a@derp.test', name: 'Admin Ádám', role },
+              devLogin: true,
+              googleLogin: false,
+              tzDisplay: 'Europe/Budapest',
+            }
           : { items: modules };
       return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
     }),
@@ -36,11 +41,27 @@ function renderLayout(modules: ModuleInfo[]) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Layout menü', () => {
-  it('a bekapcsolt modul menüpontja a mag menüpontjai után jelenik meg', async () => {
+  it('a bekapcsolt modul menüpontja a mag menüpontjai után, az admin menüpontjai előtt jelenik meg', async () => {
     renderLayout([example]);
     const nav = await screen.findByRole('navigation', { name: 'Főmenü' });
     expect(await within(nav).findByRole('link', { name: 'Minta modul' })).toHaveAttribute('href', '/example');
-    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Projektek', 'Minta modul']);
+    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual([
+      'Projektek',
+      'Ügyfelek',
+      'Minta modul',
+      'Felhasználók',
+      'Auditnapló',
+    ]);
+  });
+
+  it.each<[Role, string[]]>([
+    ['iroda', ['Projektek', 'Ügyfelek', 'Minta modul']],
+    ['terepes', ['Projektek', 'Minta modul']],
+  ])('a(z) %s szerepkör menüje', async (role, expected) => {
+    renderLayout([example], role);
+    const nav = await screen.findByRole('navigation', { name: 'Főmenü' });
+    await within(nav).findByRole('link', { name: 'Minta modul' });
+    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(expected);
   });
 
   it('kikapcsolt modulnál nincs menüpont', async () => {

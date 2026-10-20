@@ -1,6 +1,6 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
-import type { TimelineEvent } from '@derp/shared';
+import { CORE_EVENTS, type TimelineEvent } from '@derp/shared';
 import { sessionKey } from './session.ts';
 
 type Listener = (event: TimelineEvent) => void;
@@ -9,9 +9,27 @@ const listeners = new Set<Listener>();
 /** Hiba után ennyi idő múlva épül újra a kapcsolat (a böngésző saját újracsatlakozásán felül). */
 const RECONNECT_MS = 5_000;
 
-/** Egy beérkezett esemény hatása a gyorsítótárra: a projekt eseménylistája újratöltődik. */
+const DETAIL_EVENTS = new Set<string>([CORE_EVENTS.projectUpdated, CORE_EVENTS.projectDeleted, CORE_EVENTS.memberRemoved]);
+
+/**
+ * Egy beérkezett esemény hatása a gyorsítótárra: a projekt eseménylistája újratöltődik; a mag projekt-eseményeinél
+ * a projektlista, az adatlap és a hozzárendelt kollégák is (pl. a terepesnél új hozzárendelt projekt jelenik meg).
+ */
 export function applyEvent(queryClient: QueryClient, event: TimelineEvent): void {
-  if (event.projectId) void queryClient.invalidateQueries({ queryKey: ['projects', event.projectId, 'events'] });
+  const id = event.projectId;
+  if (id) {
+    void queryClient.invalidateQueries({ queryKey: ['projects', id, 'events'] });
+    if (event.type.startsWith('core.')) {
+      void queryClient.invalidateQueries({ queryKey: ['projects'], exact: true });
+      // Levételkor a terepesnél az adatlap újratöltve már „Nincs jogosultság”-ot mutat.
+      if (DETAIL_EVENTS.has(event.type)) {
+        void queryClient.invalidateQueries({ queryKey: ['projects', id], exact: true });
+      }
+      if (event.type === CORE_EVENTS.memberAdded || event.type === CORE_EVENTS.memberRemoved) {
+        void queryClient.invalidateQueries({ queryKey: ['projects', id, 'members'] });
+      }
+    }
+  }
   for (const l of listeners) l(event);
 }
 
