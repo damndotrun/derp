@@ -3,6 +3,8 @@ import { createBrowserRouter, Navigate, RouterProvider } from 'react-router';
 import { ApiError } from './api.ts';
 import { Layout } from './Layout.tsx';
 import { LoginPage } from './LoginPage.tsx';
+import { ModuleGate } from './ModuleGate.tsx';
+import { registry } from './modules.ts';
 import { ProjectDetailPage } from './ProjectDetailPage.tsx';
 import { ProjectsPage } from './ProjectsPage.tsx';
 import { sessionKey } from './session.ts';
@@ -31,6 +33,15 @@ const router = createBrowserRouter([
       { index: true, element: <Navigate to="/projects" replace /> },
       { path: 'projects', element: <ProjectsPage /> },
       { path: 'projects/:id', element: <ProjectDetailPage /> },
+      // A modulok oldalai; kikapcsolt modulnál a kapu „nincs bekapcsolva” jelzést ad.
+      ...registry.routes.map(({ path, Component, moduleId }) => ({
+        path: path.replace(/^\//, ''),
+        element: (
+          <ModuleGate moduleId={moduleId}>
+            <Component />
+          </ModuleGate>
+        ),
+      })),
     ],
   },
 ]);

@@ -1,4 +1,6 @@
 @import 'tailwindcss';
+/* A modulok felülete is Tailwind-osztályokat használ. */
+@source '../../../modules';
 
 @theme inline {
   --color-background: var(--background);

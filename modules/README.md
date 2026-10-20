@@ -1,0 +1,74 @@
+# Modulok
+
+Minden modul egy könyvtár: `modules/<id>/`. Az `id` kisbetűs (`[a-z][a-z0-9_]*`), és egyben az eseménytípusok,
+jogosultságok és i18n-kulcsok előtagja (`<id>.`). Új modulhoz a mag nem módosul; a minta az [`example`](example/).
+
+```
+modules/<id>/
+  manifest.ts          szerver oldali leíró (alapértelmezett export, `satisfies ModuleManifest`)
+  migrations/*.sql     a modul migrációi (fájlnév szerint sorban; a modul táblái `<id>_` előtagúak)
+  server/              útvonalak, seed, a modul szerver oldali kódja
+  web/index.ts         kliens oldali rész (alapértelmezett export, `satisfies WebModule`)
+  web/i18n.ts          a modul felületi szövegei
+  test/                szerver oldali Vitest-tesztek (valódi adatbázissal, a `pnpm test` futtatja)
+  web/**/*.test.tsx    kliens oldali Vitest-tesztek (jsdom)
+  e2e/*.spec.ts        a modul saját Playwright-tesztjei (a `pnpm e2e` futtatja)
+```
+
+## Felfedezés és bekapcsolás
+
+- A szerver induláskor beolvassa a `modules/*/manifest.ts` fájlokat; a `DERP_MODULES` (`*` = mind, üres = egyik sem,
+  különben vesszős lista) dönti el, melyik aktív. Ismeretlen modul, hiányzó vagy körkörös függőség (`dependsOn`) és
+  ütköző menü-útvonal esetén a szerver nem indul el.
+- A migrációk sorrendje: a mag (`apps/server/src/core/migrations/`), majd a bekapcsolt modulok függőségi sorrendben.
+- A kliens `import.meta.glob`-bal minden `modules/*/web/index.ts`-t a buildbe tesz; a menüpontokat és azt, hogy egy
+  modul oldala elérhető-e, a `GET /api/modules` válaszából tudja.
+- A `pnpm seed:e2e` a mag tesztfelhasználói után a bekapcsolt modulok `seedE2E` hookját hívja, függőségi sorrendben.
+
+## Szerver oldal (`manifest.ts`)
+
+```ts
+import type { ModuleManifest } from '@derp/server/module-api';
+
+export default {
+  id: 'example',
+  version: '0.1.0',
+  dependsOn: [],                                    // más modulok azonosítói
+  menu: [{ path: '/example', labelKey: 'example.menu' }],   // `roles`-szal szűkíthető
+  eventTypes: [{ type: 'example.pinged', labelKey: 'example.event.pinged' }],
+  permissions: [{ key: 'example.ping', roles: ['admin', 'iroda', 'terepes'] }],
+  routes: async (app, ctx) => (await import('./server/routes.ts')).routes(app, ctx),  // belépés kell
+  // publicRoutes: belépés nélküli útvonalak (pl. tokenes ICS-feed)
+  seedE2E: async (ctx) => (await import('./server/seed.ts')).seed(ctx),
+} satisfies ModuleManifest;
+```
+
+A modul a magból csak típust importál (`@derp/server/module-api`); a futásidejű segédeket a `ctx` adja:
+`ctx.db` (Drizzle), `ctx.pool`, `ctx.config`, `ctx.appendEvent(...)` (csak a manifestben felvett eseménytípussal;
+tranzakcióban második paraméterként a `tx`), `ctx.requireProject(req, id)` (404, ha nincs vagy nem látható),
+`ctx.requirePermission(key)` (preHandler, 403), `ctx.errors.*`. Harmadik féltől származó csomagot a modul a
+gyökér `node_modules`-ból ér el (a `.npmrc` `shamefully-hoist`); új függőséget a modul nem vesz fel. Nehéz csomagot
+(`googleapis`, `sharp`, `pdfmake`) a hookon belül dinamikus `import()`-tal érdemes betölteni.
+
+Az új esemény a közös `events` táblába kerül; egy trigger `NOTIFY`-t küld, és a `GET /api/stream` SSE-folyamon minden
+nyitott kliens megkapja.
+
+## Kliens oldal (`web/index.ts`)
+
+```ts
+import type { WebModule } from '@/core/module-types.ts';
+
+export default {
+  id: 'example',
+  messages,                                         // a web/i18n.ts-ből
+  routes: [{ path: '/example', Component: ExamplePage }],
+  eventRenderers: { 'example.pinged': PingedEvent }, // eseménytípus → idővonal-megjelenítő
+} satisfies WebModule;
+```
+
+- Szövegek: `web/i18n.ts`-ben `messages` (minden kulcs `<id>.` előtagú) és `export const t = moduleT(messages)`.
+- Eseménymegjelenítő: `EventRendererProps` (`event`, `timeZone`); a `DefaultEvent` (`@/core/DefaultEvent.tsx`) köré
+  építhető. Ha egy típusnak nincs megjelenítője, az alapértelmezett látszik.
+- Élő frissítés: a mag minden új eseménynél újratölti a projekt eseménylistáját; a modul saját adataihoz a
+  `useLiveEvents(handler)` (`@/core/stream.ts`) ad értesítést.
+- API-hívás: `request<T>(method, url, body)` (`@/core/api.ts`), a mag hibaformátumával.
