@@ -8,6 +8,7 @@ import { Layout } from './Layout.tsx';
 import { LoginPage } from './LoginPage.tsx';
 import { ModuleGate } from './ModuleGate.tsx';
 import { registry } from './modules.ts';
+import { outbox } from './outbox.ts';
 import { ProjectDetailPage } from './ProjectDetailPage.tsx';
 import { ProjectsPage } from './ProjectsPage.tsx';
 import { RoleGate } from './RoleGate.tsx';
@@ -16,11 +17,17 @@ import { UsersPage } from './UsersPage.tsx';
 
 const queryClient: QueryClient = new QueryClient({
   defaultOptions: {
+    // A lekérdezés offline is elindul: a service worker a tárolt választ adja (terepi mód); ha nincs, hibát mutat.
     queries: {
+      networkMode: 'always',
       retry: (count, err) => !(err instanceof ApiError && err.status < 500) && count < 2,
     },
+    mutations: { networkMode: 'always' },
   },
 });
+
+// Ha az offline sor 401-et kap, a munkamenet újraellenőrzése a belépő oldalra visz (a sor megmarad).
+outbox.onAuthRequired = () => void queryClient.invalidateQueries({ queryKey: sessionKey });
 
 // Lejárt munkamenetnél (401) a session újratöltése a belépő oldalra visz.
 queryClient.getQueryCache().subscribe((event) => {

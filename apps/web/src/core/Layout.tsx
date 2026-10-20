@@ -5,8 +5,11 @@ import type { User } from '@derp/shared';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { api } from './api.ts';
-import { t, translate } from './i18n.ts';
+import { fill, t, translate } from './i18n.ts';
 import { menuBadgeFor, useModules, type MenuBadge } from './modules.ts';
+import { clearOfflineCaches, useOfflineWarmup } from './offline.ts';
+import { outbox } from './outbox.ts';
+import { OutboxStatus, useOutboxStatus } from './OutboxStatus.tsx';
 import { isAdmin, isOffice, useSession, useUser } from './session.ts';
 import { useEventStream } from './stream.ts';
 
@@ -55,13 +58,22 @@ function Shell({ user }: { user: User }) {
   const location = useLocation();
   const items = useMenuItems();
   const [open, setOpen] = useState(false);
+  const tz = useSession().data?.tzDisplay ?? 'Europe/Budapest';
+  const unsynced = useOutboxStatus(user.id);
   useEventStream(true);
+  useOfflineWarmup(user);
 
   useEffect(() => setOpen(false), [location.pathname]);
+  // A felhasználó offline sora a belépés után (és app-megnyitáskor) indul.
+  useEffect(() => outbox.setUser(user.id), [user.id]);
 
   const logout = async () => {
+    const pending = unsynced.waiting.length + unsynced.failed.length;
+    if (pending > 0 && !window.confirm(fill(t('offline.logoutConfirm'), { n: pending }))) return;
     await api.logout();
+    outbox.setUser(null);
     queryClient.clear();
+    await clearOfflineCaches();
     navigate('/login', { replace: true });
   };
 
@@ -127,6 +139,7 @@ function Shell({ user }: { user: User }) {
       </aside>
 
       <main className="mx-auto w-full max-w-5xl min-w-0 flex-1 p-4">
+        <OutboxStatus userId={user.id} timeZone={tz} />
         <Outlet />
       </main>
     </div>

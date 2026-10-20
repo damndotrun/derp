@@ -103,6 +103,7 @@ export async function routes(app: FastifyInstance, ctx: ModuleContext): Promise<
         mime: resolveMime(q.type, q.name),
         temp,
         parentEventId,
+        capturedAt: q.capturedAt,
       });
       return reply.code(created ? 201 : 200).send(file);
     },

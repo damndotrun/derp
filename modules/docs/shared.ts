@@ -56,6 +56,11 @@ export const UploadQuery = z.object({
   sha256: Sha256.optional(),
   /** Szülő-esemény (pl. a felmérés eseménye), hogy az idővonalon egy csoportban legyenek. */
   parentEventId: z.uuid().optional(),
+  /**
+   * Kliens oldali időbélyeg (pl. offline készült fotó): ez lesz a fájl és a feltöltés-esemény ideje (a jövőbeli helyett
+   * a szerver ideje, a 30 napnál régebbit a szerver nem veszi figyelembe). Az újraküldés összevetésében nem számít.
+   */
+  capturedAt: z.iso.datetime({ offset: true }).optional(),
 });
 export type UploadQuery = z.infer<typeof UploadQuery>;
 

@@ -55,6 +55,12 @@ export interface ModuleContext extends ModuleSeedContext {
   audit(req: FastifyRequest, entry: ModuleAuditEntry, tx?: DbWriter): Promise<void>;
   /** preHandler: csak akkor enged tovább, ha a felhasználó szerepköre megkapja a modul jogosultságát (különben 403). */
   requirePermission(key: string): preHandlerAsyncHookHandler;
+  /**
+   * A kliens oldali időbélyeg (`capturedAt`, pl. offline készült fotó, jegyzet, chat-üzenet) az esemény idejéhez: a
+   * jövőbeli időpont helyett a szerver ideje, a 30 napnál régebbi, hiányzó vagy érvénytelen helyett `undefined` (a
+   * szerverre érkezés ideje).
+   */
+  clientTime(capturedAt: string | null | undefined): Date | undefined;
   /** Hibák a mag egységes hibaformátumában (`{ error: { code, message } }`). */
   errors: {
     badRequest(message: string): HttpError;

@@ -131,6 +131,8 @@ export interface NoteInput {
   id: string;
   projectId: string;
   body: string;
+  /** A kliens oldali időbélyeg (offline sor); az esemény és a jegyzet ideje. */
+  capturedAt?: string;
 }
 
 const sameNote = (n: Note, input: NoteInput, authorId: string) =>
@@ -149,11 +151,12 @@ export async function createNote(ctx: ModuleContext, req: FastifyRequest, input:
     return { note: existing, created: false };
   }
 
+  const at = ctx.clientTime(input.capturedAt);
   let created = false;
   await ctx.db.transaction(async (tx) => {
     const [row] = await tx
       .insert(notesNotes)
-      .values({ id: input.id, projectId: input.projectId, authorId: user.id, body: input.body })
+      .values({ id: input.id, projectId: input.projectId, authorId: user.id, body: input.body, ...(at ? { createdAt: at } : {}) })
       .onConflictDoNothing()
       .returning();
     // Ugyanaz az azonosító közben egy párhuzamos kérésből került be.
@@ -168,6 +171,7 @@ export async function createNote(ctx: ModuleContext, req: FastifyRequest, input:
         title: `Helyszíni jegyzet: ${excerpt(row.body)}`,
         actorId: user.id,
         data: { ...data },
+        occurredAt: at,
       },
       tx,
     );
@@ -189,6 +193,8 @@ export interface SurveyInput {
   proposedWork: string;
   materials: MaterialItem[];
   photos: PhotoRef[];
+  /** A kliens oldali időbélyeg (offline sor); az esemény és a felmérés ideje. */
+  capturedAt?: string;
 }
 
 const materialsKey = (items: MaterialItem[]) => JSON.stringify(items.map(material));
@@ -226,6 +232,7 @@ export async function createSurvey(ctx: ModuleContext, req: FastifyRequest, inpu
   }
 
   const materials = input.materials.map(material);
+  const at = ctx.clientTime(input.capturedAt);
   let created = false;
   await ctx.db.transaction(async (tx) => {
     const [row] = await tx
@@ -239,6 +246,7 @@ export async function createSurvey(ctx: ModuleContext, req: FastifyRequest, inpu
         proposedWork: input.proposedWork,
         materials,
         photos: input.photos,
+        ...(at ? { createdAt: at } : {}),
       })
       .onConflictDoNothing()
       .returning();
@@ -260,6 +268,7 @@ export async function createSurvey(ctx: ModuleContext, req: FastifyRequest, inpu
         title: `Felmérés: ${excerpt(row.location)}`,
         actorId: user.id,
         data: { ...data },
+        occurredAt: at,
       },
       tx,
     );

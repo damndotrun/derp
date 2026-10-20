@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { api } from './api.ts';
 import { t, translate } from './i18n.ts';
+import { clearOfflineCaches } from './offline.ts';
+import { OutboxLoginNotice } from './OutboxStatus.tsx';
 import { sessionKey, useSession } from './session.ts';
 
 export function LoginPage() {
@@ -21,6 +23,8 @@ export function LoginPage() {
   const login = useMutation({
     mutationFn: api.devLogin,
     onSuccess: async () => {
+      // Más felhasználó tárolt adatai ne látszódjanak (a terepi tár a következő kérésekkel újratöltődik).
+      await clearOfflineCaches();
       await queryClient.invalidateQueries({ queryKey: sessionKey });
       navigate('/projects', { replace: true });
     },
@@ -43,6 +47,7 @@ export function LoginPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          <OutboxLoginNotice />
           {googleError && (
             <p role="alert" className="text-sm text-destructive">
               {googleError}

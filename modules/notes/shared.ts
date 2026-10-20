@@ -8,6 +8,12 @@ export const MAX_PHOTOS = 30;
 
 const required = (max: number) => z.string().trim().min(1, 'kötelező mező').max(max);
 
+/**
+ * Kliens oldali időbélyeg (pl. offline írt jegyzet, felmérés): ez lesz az esemény ideje (a jövőbeli helyett a szerver
+ * ideje, a 30 napnál régebbit a szerver nem veszi figyelembe). Az újraküldés összevetésében nem számít.
+ */
+const CapturedAt = z.iso.datetime({ offset: true }).optional();
+
 /** Fotó a felmérés létrehozásakor: a kliens által kiosztott `docs_files.id` és a fájl neve. */
 export const PhotoRef = z.object({ id: z.uuid(), name: z.string().trim().min(1).max(255) });
 export type PhotoRef = z.infer<typeof PhotoRef>;
@@ -21,7 +27,7 @@ export const MaterialItem = z.object({
 export type MaterialItem = z.infer<typeof MaterialItem>;
 
 /** `PUT /api/notes/projects/:projectId/notes/:noteId` törzse: szabad szöveges helyszíni jegyzet. */
-export const NoteCreate = z.object({ body: required(MAX_TEXT) });
+export const NoteCreate = z.object({ body: required(MAX_TEXT), capturedAt: CapturedAt });
 export type NoteCreate = z.input<typeof NoteCreate>;
 
 /** `PUT /api/notes/projects/:projectId/surveys/:surveyId` törzse: a felmérés kötelező mezői és a csatolt fotók. */
@@ -32,6 +38,7 @@ export const SurveyCreate = z
     proposedWork: required(MAX_TEXT),
     materials: z.array(MaterialItem).min(1, 'legalább egy anyagtétel kell').max(MAX_MATERIALS),
     photos: z.array(PhotoRef).max(MAX_PHOTOS).default([]),
+    capturedAt: CapturedAt,
   })
   .refine((s) => new Set(s.photos.map((p) => p.id)).size === s.photos.length, 'Egy fotó kétszer szerepel');
 export type SurveyCreate = z.input<typeof SurveyCreate>;

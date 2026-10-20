@@ -26,7 +26,15 @@ describe('feltöltés a böngészőből', () => {
 
     const url = new URL(uploadUrl(u), 'http://x');
     expect(url.pathname).toBe(`/api/docs/projects/${projectId}/files/${u.id}`);
-    expect(Object.fromEntries(url.searchParams)).toEqual({ name: 'Árlista beszállító.pdf', type: 'application/pdf', sha256: u.sha256, folderId: 'f1' });
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      name: 'Árlista beszállító.pdf',
+      type: 'application/pdf',
+      sha256: u.sha256,
+      folderId: 'f1',
+      capturedAt: u.capturedAt,
+    });
+    // A kliens oldali időbélyeg (offline sor): az előkészítés ideje.
+    expect(Math.abs(Date.parse(u.capturedAt!) - Date.now())).toBeLessThan(10_000);
 
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: u.id }), { status: 201 }));
     vi.stubGlobal('fetch', fetchMock);

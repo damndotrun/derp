@@ -11,13 +11,14 @@ import { formatDateTime } from '@/core/format.ts';
 import { t as coreT } from '@/core/i18n.ts';
 import { LoadError } from '@/core/LoadError.tsx';
 import { useModules } from '@/core/modules.ts';
+import { submit as submitOutbox } from '@/core/outbox.ts';
 import { useSession, useUser } from '@/core/session.ts';
 import { useLiveEvents } from '@/core/stream.ts';
 import type { DocsFile, DocsFolder } from '../shared.ts';
 import { docsApi, docsKey, fileUrls } from './api.ts';
 import { extensionLabel, formatSize, isImage } from './format.ts';
 import { t } from './i18n.ts';
-import { uploadFile } from './upload.ts';
+import { prepareUpload } from './upload.ts';
 
 /** Egy projekt dokumentumtára: mappák, feltöltés (több fájl, húzd-és-ejtsd, telefonon kamera), fájlrács bélyegképekkel. */
 export function ProjectDocsPage() {
@@ -170,7 +171,7 @@ function Breadcrumbs({ folders, current, onOpen }: { folders: DocsFolder[]; curr
   );
 }
 
-type UploadStatus = 'waiting' | 'uploading' | 'done' | 'error';
+type UploadStatus = 'waiting' | 'uploading' | 'done' | 'queued' | 'error';
 interface UploadItem {
   key: number;
   name: string;
@@ -180,7 +181,8 @@ interface UploadItem {
 
 /**
  * Feltöltés több fájllal, húzd-és-ejtsd-del és telefonon a kamerával. A fájlok egymás után mennek fel (a szerver és a
- * terepi kapcsolat kímélése miatt); a nagy fotókat a böngésző előtte 2560 px-re kicsinyíti.
+ * terepi kapcsolat kímélése miatt); a nagy fotókat a böngésző előtte 2560 px-re kicsinyíti. Az offline soron át
+ * mennek: hálózat nélkül a telefonon várnak („Feltöltésre vár”), és visszatéréskor maguktól felmennek.
  */
 function UploadPanel({ projectId, folderId, onUploaded }: { projectId: string; folderId: string | null; onUploaded: () => Promise<unknown> }) {
   const [items, setItems] = useState<UploadItem[]>([]);
@@ -202,8 +204,10 @@ function UploadPanel({ projectId, folderId, onUploaded }: { projectId: string; f
       for (const item of added) {
         setStatus(item.key, 'uploading');
         try {
-          await uploadFile(projectId, item.file, { folderId });
-          setStatus(item.key, 'done');
+          const u = await prepareUpload(projectId, item.file, { folderId });
+          const label = `${t(isImage(u.type) ? 'docs.outboxPhoto' : 'docs.outboxFile')}: ${u.name}`;
+          const outcome = await submitOutbox('docs.upload', u, { id: u.id, projectId, label });
+          setStatus(item.key, outcome.status === 'sent' ? 'done' : 'queued');
         } catch (err) {
           setStatus(item.key, 'error', (err as Error).message);
         }

@@ -16,4 +16,6 @@ export default {
     'visits.updated': VisitEvent,
     'visits.cancelled': VisitEvent,
   },
+  // Terepi mód (8.): a „Mai kiszállásaim” a telefonon is megvan, térerő nélkül is megnyílik.
+  offlineUrls: { global: ['/api/visits/mine'] },
 } satisfies WebModule;

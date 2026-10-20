@@ -108,6 +108,8 @@ export interface MessageInput {
   projectId: string;
   body: string;
   attachments: AttachmentRef[];
+  /** A kliens oldali időbélyeg (offline sor); az üzenet és az esemény ideje. */
+  capturedAt?: string;
 }
 
 /** Ugyanaz az üzenet-e (újraküldés), vagy az azonosító egy másik üzeneté. */
@@ -152,11 +154,20 @@ export async function createMessage(
   const mentions = parseMentions(input.body, people);
   const attachmentNote = input.attachments.length > 0 ? `${input.attachments.length} csatolmány` : '';
 
+  const at = ctx.clientTime(input.capturedAt);
   let created = false;
   await ctx.db.transaction(async (tx) => {
     const [row] = await tx
       .insert(chatMessages)
-      .values({ id: input.id, projectId: input.projectId, authorId: user.id, body: input.body, mentions, attachments: input.attachments })
+      .values({
+        id: input.id,
+        projectId: input.projectId,
+        authorId: user.id,
+        body: input.body,
+        mentions,
+        attachments: input.attachments,
+        ...(at ? { createdAt: at } : {}),
+      })
       .onConflictDoNothing()
       .returning();
     // Ugyanaz az azonosító közben egy párhuzamos kérésből került be.
@@ -171,6 +182,7 @@ export async function createMessage(
         title: `Chat-üzenet: ${excerpt(row.body) || attachmentNote}`,
         actorId: user.id,
         data: { ...data },
+        occurredAt: at,
       },
       tx,
     );

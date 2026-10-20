@@ -1,5 +1,6 @@
 // Chat-üzenet küldése csatolmányokkal. Az offline sor (8.) is ezt használja: előbb `prepareMessage` (kliens oldali
-// azonosítók, kicsinyített képek; az eredmény IndexedDB-be tehető), majd `sendMessage` (újrajátszva sem duplikál).
+// azonosítók és időbélyeg, kicsinyített képek; az eredmény IndexedDB-be tehető), majd `sendMessage` (újrajátszva sem
+// duplikál). Az offline sor elemfajtája: `chat.message` (`web/index.ts`).
 import { ApiError } from '@/core/api.ts';
 import type { DocsFile } from '../../docs/shared.ts';
 import { docsApi } from '../../docs/web/api.ts';
@@ -13,14 +14,18 @@ export interface PreparedMessage {
   body: string;
   /** A csatolmányok a dokumentumtárba; a mappát és a szülő-eseményt a küldés tölti ki. */
   attachments: PreparedUpload[];
+  /** Kliens oldali időbélyeg (ISO): offline írt üzenetnél a terepi időpont (a csatolmányoké is ez). */
+  capturedAt?: string;
 }
 
 export async function prepareMessage(projectId: string, body: string, files: File[] = []): Promise<PreparedMessage> {
+  const capturedAt = new Date().toISOString();
   return {
     id: newId(),
     projectId,
     body: body.trim(),
-    attachments: await Promise.all(files.map((f) => prepareUpload(projectId, f))),
+    attachments: await Promise.all(files.map((f) => prepareUpload(projectId, f, { capturedAt }))),
+    capturedAt,
   };
 }
 
@@ -55,13 +60,14 @@ export async function sendMessage(m: PreparedMessage, onProgress?: (p: SendProgr
   const message = await chatApi.send(m.projectId, m.id, {
     body: m.body,
     attachments: m.attachments.map((a) => ({ id: a.id, name: a.name })),
+    capturedAt: m.capturedAt,
   });
   onProgress?.({ message, uploaded: 0 });
   const files: DocsFile[] = [];
   if (m.attachments.length > 0) {
     const folderId = await chatFolderId(m.projectId);
     for (const a of m.attachments) {
-      files.push(await sendUpload({ ...a, folderId, parentEventId: message.eventId }));
+      files.push(await sendUpload({ ...a, folderId, parentEventId: message.eventId, capturedAt: m.capturedAt ?? a.capturedAt }));
       onProgress?.({ message, uploaded: files.length });
     }
   }

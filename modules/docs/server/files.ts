@@ -101,6 +101,8 @@ export interface UploadInput {
   mime: string;
   temp: TempBlob;
   parentEventId: string | null;
+  /** A kliens oldali időbélyeg (offline sor); a fájl és az esemény ideje. */
+  capturedAt?: string;
 }
 
 /**
@@ -124,6 +126,7 @@ export async function storeUpload(
     return { file: existing, created: false };
   }
 
+  const at = ctx.clientTime(input.capturedAt);
   let created = false;
   try {
     await ctx.db.transaction(async (tx) => {
@@ -151,6 +154,7 @@ export async function storeUpload(
           mime: input.mime,
           size: temp.size,
           uploadedBy: req.user!.id,
+          ...(at ? { createdAt: at } : {}),
         })
         .onConflictDoNothing()
         .returning();
@@ -166,6 +170,7 @@ export async function storeUpload(
           actorId: req.user!.id,
           data: { ...eventData(row, hasThumb) },
           parentId: input.parentEventId,
+          occurredAt: at,
         },
         tx,
       );
