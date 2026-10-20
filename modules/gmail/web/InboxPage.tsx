@@ -32,10 +32,11 @@ function Inbox() {
   const tz = useSession().data?.tzDisplay ?? 'Europe/Budapest';
   const queryClient = useQueryClient();
   const [limit, setLimit] = useState(PAGE);
+  const [view, setView] = useState<'open' | 'dismissed'>('open');
   const [notice, setNotice] = useState<{ text: string; projectId?: string } | null>(null);
   useLiveGmail();
 
-  const threads = useQuery({ queryKey: [...threadsKey, limit], queryFn: () => gmailApi.unassigned(limit) });
+  const threads = useQuery({ queryKey: [...threadsKey, view, limit], queryFn: () => gmailApi.unassigned(limit, view) });
   const projects = useQuery({ queryKey: ['projects'], queryFn: api.projects });
 
   const sync = useMutation({
@@ -67,19 +68,40 @@ function Inbox() {
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
           <CardTitle>
-            {t('gmail.inbox.title')}
+            {view === 'open' ? t('gmail.inbox.title') : t('gmail.inbox.dismissedTitle')}
             {threads.data && <span className="ml-2 text-sm font-normal text-muted-foreground">{fill(t('gmail.inbox.count'), { n: threads.data.total })}</span>}
           </CardTitle>
-          <Button size="sm" variant="outline" disabled={sync.isPending} onClick={() => sync.mutate()}>
-            {sync.isPending ? t('gmail.sync.running') : t('gmail.sync.now')}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <div role="group" aria-label={t('gmail.inbox.views')} className="flex">
+              {(['open', 'dismissed'] as const).map((v) => (
+                <Button
+                  key={v}
+                  size="sm"
+                  variant={view === v ? 'default' : 'outline'}
+                  aria-pressed={view === v}
+                  className={v === 'open' ? 'rounded-r-none' : 'rounded-l-none'}
+                  onClick={() => {
+                    setView(v);
+                    setLimit(PAGE);
+                  }}
+                >
+                  {v === 'open' ? t('gmail.inbox.viewOpen') : t('gmail.inbox.viewDismissed')}
+                </Button>
+              ))}
+            </div>
+            <Button size="sm" variant="outline" disabled={sync.isPending} onClick={() => sync.mutate()}>
+              {sync.isPending ? t('gmail.sync.running') : t('gmail.sync.now')}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {threads.isPending && <p className="text-sm text-muted-foreground">…</p>}
           {threads.isError && <p className="text-sm text-destructive">{threads.error.message}</p>}
-          {threads.data && items.length === 0 && <p className="text-sm text-muted-foreground">{t('gmail.inbox.empty')}</p>}
+          {threads.data && items.length === 0 && (
+            <p className="text-sm text-muted-foreground">{view === 'open' ? t('gmail.inbox.empty') : t('gmail.inbox.dismissedEmpty')}</p>
+          )}
           {items.length > 0 && (
-            <ul aria-label={t('gmail.inbox.title')} className="flex flex-col divide-y">
+            <ul aria-label={view === 'open' ? t('gmail.inbox.title') : t('gmail.inbox.dismissedTitle')} className="flex flex-col divide-y">
               {items.map((thread) => (
                 <ThreadItem
                   key={thread.id}
@@ -87,6 +109,7 @@ function Inbox() {
                   projects={projects.data?.items ?? []}
                   timeZone={tz}
                   onAssigned={(project) => setNotice({ text: fill(t('gmail.inbox.assigned'), { subject: thread.subject, project: project.name }), projectId: project.id })}
+                  onDismissed={(dismissed) => setNotice({ text: fill(t(dismissed ? 'gmail.inbox.dismissed' : 'gmail.inbox.restored'), { subject: thread.subject }) })}
                 />
               ))}
             </ul>
@@ -107,11 +130,13 @@ function ThreadItem({
   projects,
   timeZone,
   onAssigned,
+  onDismissed,
 }: {
   thread: ThreadSummary;
   projects: Project[];
   timeZone: string;
   onAssigned: (project: Project) => void;
+  onDismissed: (dismissed: boolean) => void;
 }) {
   const queryClient = useQueryClient();
   const selectId = useId();
@@ -125,6 +150,14 @@ function ThreadItem({
       void queryClient.invalidateQueries({ queryKey: gmailKey });
     },
   });
+  const dismiss = useMutation({
+    mutationFn: (dismissed: boolean) => gmailApi.dismiss(thread.id, dismissed),
+    onSuccess: (_, dismissed) => {
+      onDismissed(dismissed);
+      void queryClient.invalidateQueries({ queryKey: gmailKey });
+    },
+  });
+  const isDismissed = thread.dismissedAt !== null;
 
   return (
     <li className="flex flex-col gap-2 py-3" data-thread={thread.id}>
@@ -164,13 +197,16 @@ function ThreadItem({
         <Button type="submit" size="sm" disabled={!projectId || assign.isPending}>
           {t('gmail.inbox.assign')}
         </Button>
+        <Button type="button" size="sm" variant="ghost" disabled={dismiss.isPending} onClick={() => dismiss.mutate(!isDismissed)}>
+          {isDismissed ? t('gmail.inbox.restore') : t('gmail.inbox.dismiss')}
+        </Button>
         {thread.suggestion && (
           <span className="text-sm text-muted-foreground">
             {t('gmail.inbox.suggestion')}: {thread.suggestion.projectName}
           </span>
         )}
       </form>
-      {assign.isError && <p className="text-sm text-destructive">{assign.error.message}</p>}
+      {(assign.error ?? dismiss.error) && <p className="text-sm text-destructive">{(assign.error ?? dismiss.error)!.message}</p>}
     </li>
   );
 }

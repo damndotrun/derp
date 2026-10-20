@@ -15,6 +15,7 @@ import {
   RuleUpdate,
   SyncResults,
   ThreadAssign,
+  ThreadDismiss,
   ThreadDetail,
   ThreadList,
   ThreadsQuery,
@@ -24,7 +25,7 @@ import { addAccount, getAccount, listAccounts } from './accounts.ts';
 import { createSource, mailSourceKind, mockSource } from './mail-source.ts';
 import { createRule, deleteRule, listRules, updateRule } from './rules.ts';
 import { syncAccount, syncAll, type SyncDeps } from './sync.ts';
-import { assignThread, getMessage, getThread, listUnassigned } from './threads.ts';
+import { assignThread, getMessage, getThread, listUnassigned, setDismissed } from './threads.ts';
 
 /** A növekményes betöltés gyakorisága (spec: 15 percenként `history.list`). */
 export const SYNC_INTERVAL_MS = 15 * 60_000;
@@ -79,21 +80,40 @@ export async function routes(app: FastifyInstance, ctx: ModuleContext): Promise<
     return thread;
   });
 
-  // Szál → projekt. Ugyanahhoz a projekthez újra: 200 (nem változik); másik projekthez: 409.
+  // Szál → projekt: hozzárendelés, vagy ha már másik projekté, áthelyezés. Ugyanahhoz a projekthez újra: nem változik.
   r.put(
     '/api/gmail/threads/:id/project',
     { preHandler: canAssign, schema: { params: idParams, body: ThreadAssign, response: { 200: ThreadDetail } } },
     async (req) => {
       const project = await ctx.requireProject(req, req.body.projectId);
-      const outcome = await assignThread(ctx.db, ctx.appendEvent, { threadId: req.params.id, projectId: project.id, userId: req.user!.id }, (tx, subject) =>
+      const outcome = await assignThread(ctx.db, ctx.appendEvent, { threadId: req.params.id, projectId: project.id, userId: req.user!.id }, (tx, subject, fromProjectId) =>
         ctx.audit(
           req,
-          { action: 'update', entity: 'thread', entityId: req.params.id, label: subject, projectId: project.id, data: { projectId: project.id } },
+          {
+            action: 'update',
+            entity: 'thread',
+            entityId: req.params.id,
+            label: subject,
+            projectId: project.id,
+            data: { projectId: project.id, fromProjectId },
+          },
           tx,
         ),
       );
       if (outcome.status === 'not_found') throw ctx.errors.notFound('A levélszál nem található');
-      if (outcome.status === 'conflict') throw ctx.errors.conflict('A levélszál már egy másik projekthez tartozik');
+      return (await getThread(ctx.db, req.params.id))!;
+    },
+  );
+
+  // Hozzárendeletlen szál elvetése (pl. hírlevél) vagy visszaállítása; projekthez rendelt szálnál 409.
+  r.put(
+    '/api/gmail/threads/:id/dismissed',
+    { preHandler: canAssign, schema: { params: idParams, body: ThreadDismiss, response: { 200: ThreadDetail } } },
+    async (req) => {
+      const outcome = await setDismissed(ctx.db, { threadId: req.params.id, dismissed: req.body.dismissed, userId: req.user!.id });
+      if (outcome.status === 'not_found') throw ctx.errors.notFound('A levélszál nem található');
+      if (outcome.status === 'assigned') throw ctx.errors.conflict('Projekthez rendelt levélszál nem vethető el');
+      await ctx.audit(req, { action: 'update', entity: 'thread', entityId: req.params.id, label: outcome.subject, data: { dismissed: req.body.dismissed } });
       return (await getThread(ctx.db, req.params.id))!;
     },
   );
