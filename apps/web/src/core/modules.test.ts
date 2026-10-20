@@ -23,5 +23,17 @@ describe('modulregiszter', () => {
       buildRegistry([{ id: 'gamma', messages: {}, eventRenderers: { 'core.project_created': Dummy } }]),
     ).toThrow(/core\.project_created/);
     expect(() => buildRegistry([{ id: 'example', messages: { 'example.menu': 'Másik' } }])).toThrow(/kétszer/);
+    expect(() =>
+      buildRegistry([{ id: 'delta', messages: {}, projectLinks: [{ labelKey: 'projects.title', to: (id) => `/delta/${id}` }] }]),
+    ).toThrow(/projects\.title/);
+  });
+
+  it('a projektlinkeket és a menüjelvényeket modulonként gyűjti', () => {
+    const r = buildRegistry([
+      { id: 'epsilon', messages: {}, projectLinks: [{ labelKey: 'epsilon.menu', to: (id) => `/epsilon/${id}` }], menuBadges: { '/epsilon': Dummy } },
+    ]);
+    expect(r.projectLinks).toEqual([expect.objectContaining({ moduleId: 'epsilon', labelKey: 'epsilon.menu' })]);
+    expect(r.projectLinks[0]!.to('p1')).toBe('/epsilon/p1');
+    expect(r.menuBadges.get('epsilon:/epsilon')).toBe(Dummy);
   });
 });
