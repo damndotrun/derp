@@ -1,0 +1,48 @@
+# dERP a plasticgarden NAS-on, TrueNAS Custom Appként (13. munkacsomag).
+# A Custom App nem tud buildelni és nem helyettesít ${...} változókat, ezért ez a fájl a kész
+# `derp-app:latest` képet indítja, a titkokat pedig env_file-ból kapja. Telepítés és frissítés:
+# deploy/nas-telepites.sh (a kép építése, frissítés előtti pg_dump, app.create / app.update).
+#
+# Titkok (a NAS-on, egyik SMB-share sem fedi, 700/600 root):
+#   /mnt/Tank/derp/secrets/.env    DATABASE_URL, SESSION_SECRET, GOOGLE_LOGIN_CLIENT_ID, GOOGLE_LOGIN_CLIENT_SECRET
+#   /mnt/Tank/derp/secrets/db.env  POSTGRES_PASSWORD
+services:
+  app:
+    image: derp-app:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - /mnt/Tank/derp/secrets/.env
+    environment:
+      PUBLIC_BASE_URL: https://derp.damndot.run
+      TZ_DISPLAY: Europe/Budapest
+      DERP_MODULES: "*"
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=256
+    ports:
+      # 0.0.0.0: a Cloudflare Tunnel (cloudflared konténer) a 192.168.1.63:30080-on éri el.
+      - "30080:8080"
+    volumes:
+      # A fájltárolás (DATA_DIR) a 4. munkacsomagtól; a kötet már most a helyén van.
+      - /mnt/Tank/derp/files:/data/files
+    mem_limit: 384m
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - /mnt/Tank/derp/secrets/db.env
+    environment:
+      POSTGRES_USER: derp
+      POSTGRES_DB: derp
+    volumes:
+      # A könyvtár tulajdonosa a 70-es UID (postgres az alpine képben).
+      - /mnt/Tank/derp/db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U derp -d derp"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 256m

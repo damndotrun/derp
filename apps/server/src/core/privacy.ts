@@ -21,6 +21,7 @@ const html = `<!doctype html>
   h2 { font-size: 1.15rem; margin: 2rem 0 .5rem; padding-top: 1rem; border-top: 1px solid var(--line); }
   p.meta { color: var(--muted); margin: 0 0 1.5rem; }
   ul { padding-left: 1.25rem; }
+  ul.plain { list-style: none; padding-left: 0; }
   a { color: inherit; }
 </style>
 </head>
@@ -30,8 +31,18 @@ const html = `<!doctype html>
 <p class="meta">dERP – a Dóka Kft. belső ügyviteli rendszere · Hatályos: 2026. október 20.</p>
 
 <h2>Az adatkezelő</h2>
-<p>Dóka Kft., Kecskemét; kapcsolat: <a href="mailto:dokaklima@gmail.com">dokaklima@gmail.com</a>. A dERP a cég belső ügyviteli rendszere: a projekteket az első bejelentéstől a lezárásig
-kezeli, irodai gépen és a terepen használt telefonokon. Csak a cég által felvett felhasználók léphetnek be.</p>
+<ul class="plain">
+  <li><strong>Név:</strong> Dóka Kft.</li>
+  <li><strong>Székhely, levelezési cím, panaszkezelés:</strong> 6000 Kecskemét, Műkerti sétány 9.</li>
+  <li><strong>Adószám:</strong> 13374242-2-03 · <strong>Cégjegyzékszám:</strong> 15-09-076588</li>
+  <li><strong>Képviselő:</strong> Dóka Károly</li>
+  <li><strong>E-mail:</strong> <a href="mailto:klima@dokakft.hu">klima@dokakft.hu</a> ·
+    <strong>Telefon:</strong> <a href="tel:+3676416470">+36 76 416 470</a></li>
+  <li><strong>Kapcsolat a dERP adatkezelésével kapcsolatban:</strong> <a href="mailto:dokaklima@gmail.com">dokaklima@gmail.com</a></li>
+</ul>
+<p>A dERP a cég belső ügyviteli rendszere: a projekteket az első bejelentéstől a lezárásig kezeli, irodai gépen és
+a terepen használt telefonokon. Csak a cég által felvett felhasználók léphetnek be. A cég nyilvános weboldalának
+(dokakft.hu) adatkezeléseiről külön tájékoztató szól.</p>
 
 <h2>Belépés Google-fiókkal</h2>
 <p>A belépés a Google OpenID Connect szolgáltatásával történik (<code>openid email profile</code> hatókör). A Google
@@ -65,16 +76,30 @@ kezelése) kezeljük, a cég jogos érdeke és az ügyfelekkel kötött szerződ
 személyes adatokhoz való hozzáférés ellenőrizhetőségét és az adatbiztonságot szolgálja.</p>
 
 <h2>Tárolás és hozzáférés</h2>
-<p>Az adatokat a cég saját üzemeltetésű szerverén tároljuk. A rendszer internetes elérését a Cloudflare
-szolgáltatása (Cloudflare Tunnel és Access) védi. Az adatokhoz csak a belépett felhasználók férnek hozzá a
-szerepkörük szerint: a terepen dolgozó kollégák csak a hozzájuk rendelt projekteket és azok ügyfeleinek
-elérhetőségét látják. Az adatokat csak addig őrizzük, amíg az ügyviteli célhoz vagy jogszabályi kötelezettség
-teljesítéséhez szükséges.</p>
+<p>Az adatokhoz csak a belépett felhasználók férnek hozzá a szerepkörük szerint: a terepen dolgozó kollégák csak a
+hozzájuk rendelt projekteket és azok ügyfeleinek elérhetőségét látják. Az adatokat csak addig őrizzük, amíg az
+ügyviteli célhoz vagy jogszabályi kötelezettség teljesítéséhez szükséges.</p>
+
+<h2>Adatfeldolgozók, adattovábbítás</h2>
+<ul>
+  <li><strong>Üzemeltetés, tárhely:</strong> Dóka Krisztián E.V. (6000 Kecskemét, Műkerti sétány 9.;
+    <a href="mailto:info@dnome.hu">info@dnome.hu</a>; +36 20 238 6918; dnome.hu). A szerződés alapján a rendszert
+    üzemelteti és az adatokat tárolja.</li>
+  <li><strong>Hozzáférés-védelem:</strong> Cloudflare, Inc. – a rendszer internetes elérését a Cloudflare Tunnel és
+    Access szolgáltatása védi; a forgalom rajta keresztül jut el a szerverig.</li>
+  <li><strong>Belépés:</strong> Google – a belépéskor a Google azonosítja a felhasználót (lásd fent).</li>
+</ul>
+<p>Harmadik félnek adatot nem továbbítunk.</p>
 
 <h2>Az érintettek jogai</h2>
 <p>Az érintett kérheti a róla kezelt adatokhoz való hozzáférést, azok helyesbítését, törlését vagy kezelésük
-korlátozását, és tiltakozhat az adatkezelés ellen; kérelmét a Dóka Kft.-hez intézheti a <a href="mailto:dokaklima@gmail.com">dokaklima@gmail.com</a> címen. Panasszal a Nemzeti
-Adatvédelmi és Információszabadság Hatósághoz (NAIH, <a href="https://naih.hu">naih.hu</a>) fordulhat.</p>
+korlátozását, kérheti az adatai hordozható formában (xml, JSON vagy csv) való kiadását, és tiltakozhat a jogos
+érdeken alapuló adatkezelés ellen. A kérelmeket és panaszokat a fenti elérhetőségeken fogadjuk, és legkésőbb 30 napon
+belül válaszolunk rájuk.</p>
+<p>Jogsértés esetén a Nemzeti Adatvédelmi és Információszabadság Hatósághoz fordulhat (NAIH; 1055 Budapest, Falk
+Miksa utca 9–11.; levelezési cím: 1363 Budapest, Pf. 9.; <a href="mailto:ugyfelszolgalat@naih.hu">ugyfelszolgalat@naih.hu</a>;
++36 1 391 1400; <a href="https://naih.hu">naih.hu</a>), illetve a lakóhelye vagy tartózkodási helye szerint
+illetékes törvényszékhez.</p>
 </main>
 </body>
 </html>
