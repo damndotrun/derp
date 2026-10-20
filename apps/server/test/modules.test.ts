@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { User } from '@derp/shared';
 import { moduleInfoFor } from '../src/core/module-host.ts';
-import { discoverModules, ModuleError, selectModules, type LoadedModule } from '../src/core/modules.ts';
+import { discoverModules, loadModules, ModuleError, selectModules, type LoadedModule } from '../src/core/modules.ts';
 import { createTestApp, login } from './helpers.ts';
 
 /** Ideiglenes modulkönyvtár a megadott manifestekkel (könyvtárnév → manifest-objektum). */
@@ -126,8 +126,11 @@ describe('GET /api/modules', () => {
   });
 
   it('a bekapcsolt modulokat adja, a DERP_MODULES szerint', async () => {
+    // A `*` minden modult bekapcsol, ami a modules/ alatt van (új modul-munkacsomagnál ez a lista bővül).
+    const all = (await loadModules('*')).map((m) => m.manifest.id);
+    expect(all).toContain('example');
     for (const [env, expected] of [
-      ['*', ['example']],
+      ['*', all],
       ['example', ['example']],
       ['', []],
     ] as const) {
