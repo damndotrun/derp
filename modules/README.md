@@ -90,3 +90,8 @@ export default {
 - Élő frissítés: a mag minden új eseménynél újratölti a projekt eseménylistáját; a modul saját adataihoz a
   `useLiveEvents(handler)` (`@/core/stream.ts`) ad értesítést.
 - API-hívás: `request<T>(method, url, body)` (`@/core/api.ts`), a mag hibaformátumával.
+- Link a projekt-adatlapon („A projekt oldalai” linksor, csak bekapcsolt modulnál): `projectLinks: [{ labelKey,
+  to: (projectId) => '/<útvonal>/' + projectId, Badge? }]`; a feliratkulcs a modul előtagjával, a `Badge` (ha van) a
+  felirat mellé kerül (`{ projectId }` propot kap, pl. olvasatlan üzenetek száma).
+- Jelvény a menüpont mellett: `menuBadges: { '/<menü-útvonal>': Komponens }` (a kulcs a manifest `menu[].path`-ja; a
+  komponens propot nem kap, és semmit nem jelenít meg, ha nincs mit jelezni). Az adatát a modul saját végpontjából veszi.
