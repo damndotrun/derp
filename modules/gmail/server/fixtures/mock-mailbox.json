@@ -1,0 +1,77 @@
+{
+  "_comment": "A mock Gmail-forrás postafiókja (MAIL_SOURCE=mock). Kitalált szereplők és címek; minden bekötött mock-fiók ezt látja. Az időpont a szerver indulásához képest: minutesAgo.",
+  "messages": [
+    {
+      "id": "mock-m-minta-1",
+      "threadId": "mock-t-minta",
+      "minutesAgo": 2880,
+      "from": "Minta Béla <bela@minta-kft.test>",
+      "to": ["levelek@derp.test"],
+      "subject": "Re: Minta Kft. ajánlatkérés",
+      "body": "Tisztelt Dóka Kft.!\n\nA telefonos egyeztetés alapján kérnénk ajánlatot a csarnok légtechnikai felújítására (elszívó ventilátor cseréje, 2 db befúvó). A helyszíni felmérés időpontját kérem, jelezzék.\n\nÜdvözlettel:\nMinta Béla\nMinta Kft.",
+      "attachments": [
+        { "name": "alaprajz_csarnok.pdf", "mimeType": "application/pdf", "size": 183402, "attachmentId": "mock-a-minta-1" }
+      ]
+    },
+    {
+      "id": "mock-m-minta-2",
+      "threadId": "mock-t-minta",
+      "minutesAgo": 2700,
+      "from": "Iroda <levelek@derp.test>",
+      "to": ["bela@minta-kft.test"],
+      "subject": "Re: Minta Kft. ajánlatkérés",
+      "body": "Kedves Minta Béla!\n\nKöszönjük a megkeresést, a felmérést a jövő hétre ütemezzük, kollégánk egyeztet Önnel.\n\nÜdvözlettel:\nDóka Kft.",
+      "labelIds": ["SENT"]
+    },
+    {
+      "id": "mock-m-pelda-1",
+      "threadId": "mock-t-pelda",
+      "minutesAgo": 7200,
+      "from": "Példa Péter <peter@pelda-bt.test>",
+      "to": ["levelek@derp.test"],
+      "subject": "Kérnék ajánlatot irodai klímára",
+      "body": "Jó napot! Kérnék ajánlatot 3 irodahelyiség klimatizálására, leadási határidő a hónap vége.\nPélda Péter"
+    },
+    {
+      "id": "mock-m-hutogep-1",
+      "threadId": "mock-t-hutogep",
+      "minutesAgo": 10080,
+      "from": "Iroda <levelek@derp.test>",
+      "to": ["ertekesites@hutogep.test"],
+      "subject": "Légkezelő ajánlatkérés – Teszt utcai iroda",
+      "body": "Tisztelt Hűtőgép Kft.! Kérlek frissítsétek a múlt havi légkezelő ajánlatot a mellékelt adatok szerint.",
+      "labelIds": ["SENT"]
+    },
+    {
+      "id": "mock-m-hutogep-2",
+      "threadId": "mock-t-hutogep",
+      "minutesAgo": 8640,
+      "from": "Hűtőgép Kft. értékesítés <ertekesites@hutogep.test>",
+      "to": ["levelek@derp.test"],
+      "subject": "Re: Légkezelő ajánlatkérés – Teszt utcai iroda",
+      "body": "Csatoltan küldjük árajánlatunkat a légkezelőre. Szállítás 3 hét.",
+      "attachments": [
+        { "name": "ajanlat_legkezelo.pdf", "mimeType": "application/pdf", "size": 240123, "attachmentId": "mock-a-hutogep-1" },
+        { "name": "adatlap.xlsx", "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "size": 18211, "attachmentId": "mock-a-hutogep-2" }
+      ]
+    },
+    {
+      "id": "mock-m-teszt-1",
+      "threadId": "mock-t-teszt",
+      "minutesAgo": 4320,
+      "from": "Teszt Zrt. beszerzés <beszerzes@teszt-zrt.test>",
+      "to": ["levelek@derp.test"],
+      "subject": "Megrendelés – tetőventilátor csere",
+      "body": "Az ajánlatukat elfogadjuk, ezúton megrendeljük a tetőventilátor cseréjét. Kérjük a visszaigazolást."
+    },
+    {
+      "id": "mock-m-hirlevel-1",
+      "threadId": "mock-t-hirlevel",
+      "minutesAgo": 1440,
+      "from": "Szerelvénybolt <hirlevel@szerelvenybolt.test>",
+      "to": ["levelek@derp.test"],
+      "subject": "Havi hírlevél – akciók",
+      "body": "E havi akcióink: csőidomok, szigetelés, rögzítéstechnika."
+    }
+  ]
+}
