@@ -47,6 +47,8 @@ COPY apps/server/package.json apps/server/
 COPY apps/server/src apps/server/src
 COPY modules modules
 COPY --from=build /app/apps/web/dist apps/web/dist
+# A fájltár (DATA_DIR) helye; a node tulajdona, hogy a ráhúzott névvel ellátott kötet is írható legyen.
+RUN mkdir -p /data/files && chown node:node /data/files
 USER node
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

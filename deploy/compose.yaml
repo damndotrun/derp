@@ -26,6 +26,9 @@ services:
       NODE_OPTIONS: --max-old-space-size=256
     ports:
       - "${DERP_HOST_PORT:-8080}:8080"
+    volumes:
+      # Feltöltött fájlok és bélyegképek (docs modul, DATA_DIR); a konténer cseréjét túléli.
+      - ${DERP_FILES_DIR:-files-data}:/data/files
     mem_limit: 384m
 
   db:
@@ -46,3 +49,4 @@ services:
 
 volumes:
   db-data:
+  files-data:
