@@ -1,0 +1,44 @@
+# dERP — 1. munkacsomag: app + db. A `backup` szolgáltatás és az `e2e` profil a 13./16. munkacsomagban jön.
+# Indítás: cp deploy/.env.example deploy/.env (titkok kitöltése), majd
+#   docker compose -f deploy/compose.yaml up -d
+name: derp
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: derp-app:${DERP_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://derp:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD kell a deploy/.env-ben}@db:5432/derp
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET kell a deploy/.env-ben}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
+      TZ_DISPLAY: ${TZ_DISPLAY:-Europe/Budapest}
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=256
+    ports:
+      - "8080:8080"
+    mem_limit: 384m
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: derp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD kell a deploy/.env-ben}
+      POSTGRES_DB: derp
+    volumes:
+      - ${DERP_DB_DIR:-db-data}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U derp -d derp"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 256m
+
+volumes:
+  db-data:
