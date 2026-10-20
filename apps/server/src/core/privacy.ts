@@ -30,7 +30,7 @@ const html = `<!doctype html>
 <p class="meta">dERP – a Dóka Kft. belső ügyviteli rendszere · Hatályos: 2026. október 20.</p>
 
 <h2>Az adatkezelő</h2>
-<p>Dóka Kft., Kecskemét. A dERP a cég belső ügyviteli rendszere: a projekteket az első bejelentéstől a lezárásig
+<p>Dóka Kft., Kecskemét; kapcsolat: <a href="mailto:dokaklima@gmail.com">dokaklima@gmail.com</a>. A dERP a cég belső ügyviteli rendszere: a projekteket az első bejelentéstől a lezárásig
 kezeli, irodai gépen és a terepen használt telefonokon. Csak a cég által felvett felhasználók léphetnek be.</p>
 
 <h2>Belépés Google-fiókkal</h2>
@@ -73,7 +73,7 @@ teljesítéséhez szükséges.</p>
 
 <h2>Az érintettek jogai</h2>
 <p>Az érintett kérheti a róla kezelt adatokhoz való hozzáférést, azok helyesbítését, törlését vagy kezelésük
-korlátozását, és tiltakozhat az adatkezelés ellen; kérelmét a Dóka Kft.-hez intézheti. Panasszal a Nemzeti
+korlátozását, és tiltakozhat az adatkezelés ellen; kérelmét a Dóka Kft.-hez intézheti a <a href="mailto:dokaklima@gmail.com">dokaklima@gmail.com</a> címen. Panasszal a Nemzeti
 Adatvédelmi és Információszabadság Hatósághoz (NAIH, <a href="https://naih.hu">naih.hu</a>) fordulhat.</p>
 </main>
 </body>

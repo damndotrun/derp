@@ -16,6 +16,7 @@ import { privacyRoutes } from './core/privacy.ts';
 import { projectRoutes } from './core/projects.ts';
 import { staticRoutes, WEB_DIST } from './core/static.ts';
 import { EventHub, PING_MS, streamRoutes } from './core/stream.ts';
+import { testRoutes } from './core/test-routes.ts';
 import { userRoutes } from './core/users.ts';
 
 export interface AppOptions {
@@ -83,6 +84,7 @@ export async function buildApp({
     await protectedScope.register(auditRoutes, { db });
     await protectedScope.register(moduleListRoutes, { modules });
     await protectedScope.register(streamRoutes, { db, hub, pingMs: streamPingMs });
+    if (config.nodeEnv === 'test') await protectedScope.register(testRoutes, { db });
     for (const m of modules) {
       const { routes } = m.manifest;
       if (routes) await protectedScope.register(async (scope) => routes(scope, createModuleContext(m, db, pool, config)));

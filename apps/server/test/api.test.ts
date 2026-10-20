@@ -183,5 +183,7 @@ describe('adatvédelmi tájékoztató', () => {
     expect(res.headers['content-type']).toMatch(/^text\/html/);
     expect(res.body).toContain('<h1>Adatvédelmi tájékoztató</h1>');
     expect(res.body).toContain('gmail.readonly');
+    // Az adatkezelő és elérhetősége (a meglévő `utemezo` adatvédelmi nyilatkozatával egyezően).
+    expect(res.body).toContain('Dóka Kft., Kecskemét; kapcsolat: <a href="mailto:dokaklima@gmail.com">dokaklima@gmail.com</a>');
   });
 });

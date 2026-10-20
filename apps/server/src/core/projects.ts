@@ -6,6 +6,7 @@ import {
   CORE_EVENTS,
   EventList,
   EventListQuery,
+  EventTypeCounts,
   Project,
   ProjectCreate,
   ProjectList,
@@ -19,7 +20,7 @@ import { isProjectMember, OFFICE_ROLES, requireRole, seesAllProjects, visiblePro
 import { recordView, writeAudit } from './audit.ts';
 import type { Db } from './db.ts';
 import { badRequest, conflict, forbidden, notFound } from './errors.ts';
-import { appendEvent, listProjectEvents } from './events.ts';
+import { appendEvent, listProjectEvents, projectEventTypes } from './events.ts';
 import { clients, projectMembers, projects, users } from './schema.ts';
 
 type ProjectRow = typeof projects.$inferSelect;
@@ -220,7 +221,16 @@ export async function projectRoutes(app: FastifyInstance, opts: { db: Db }): Pro
     { schema: { params: IdParams, querystring: EventListQuery, response: { 200: EventList } } },
     async (req) => {
       await getVisibleProject(db, req.user!, req.params.id);
-      return { items: await listProjectEvents(db, req.params.id, req.query.limit) };
+      return listProjectEvents(db, req.params.id, req.query);
+    },
+  );
+
+  r.get(
+    '/api/projects/:id/event-types',
+    { schema: { params: IdParams, response: { 200: EventTypeCounts } } },
+    async (req) => {
+      await getVisibleProject(db, req.user!, req.params.id);
+      return { items: await projectEventTypes(db, req.params.id) };
     },
   );
 
