@@ -36,7 +36,8 @@ export function contentDisposition(kind: 'inline' | 'attachment', name: string):
 
 export async function routes(app: FastifyInstance, ctx: ModuleContext): Promise<void> {
   const store = new BlobStore(dataDir());
-  await store.init();
+  // Ha a DATA_DIR nem írható, a szerver attól még elindul (a többi modul működjön); a feltöltés ad hibát.
+  await store.init().catch((err: Error) => app.log.error({ err, dataDir: store.root }, 'docs: a DATA_DIR nem hozható létre'));
   const docs: Docs = { ctx, store };
   const r = app.withTypeProvider<ZodTypeProvider>();
 

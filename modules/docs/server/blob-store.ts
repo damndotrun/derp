@@ -47,6 +47,7 @@ export class BlobStore {
   /** A folyamot ideiglenes fájlba írja és közben hash-eli; `maxBytes` fölött `TooLargeError`. */
   async writeTemp(source: Readable, maxBytes: number): Promise<TempBlob> {
     const tmp = path.join(this.root, 'tmp', randomUUID());
+    await mkdir(path.dirname(tmp), { recursive: true });
     const hash = createHash('sha256');
     let size = 0;
     try {
