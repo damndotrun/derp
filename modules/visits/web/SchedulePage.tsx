@@ -194,13 +194,12 @@ function VisitChip({ visit, timeZone, onPick }: { visit: Visit; timeZone: string
   const body = (
     <>
       <span className="flex flex-wrap items-center gap-1">
-        <span className="font-medium tabular-nums">{timeRange(visit, timeZone, t('visits.overnight'))}</span>
+        <span className="whitespace-nowrap font-medium tabular-nums">{timeRange(visit, timeZone, t('visits.overnight'))}</span>
         {visit.status !== 'utemezett' && <StatusBadge status={visit.status} />}
-        {conflict && <ConflictBadge />}
+        {conflict && <ConflictBadge visit={visit} timeZone={timeZone} />}
       </span>
       <span className="block truncate">{visit.projectName}</span>
       {visit.address && <span className="block truncate text-xs text-muted-foreground">{visit.address}</span>}
-      <ConflictNote visit={visit} timeZone={timeZone} />
     </>
   );
   const className = cn(

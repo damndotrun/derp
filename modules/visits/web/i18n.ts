@@ -28,6 +28,7 @@ export const messages = {
   'visits.mineEmpty': 'Erre a napra nincs kiszállásod.',
   'visits.conflict': 'Ütközés',
   'visits.conflictWith': 'Ütközik: {name} – {project}, {time}',
+  'visits.conflictMore': 'és még {count} ütközés',
   'visits.hiddenProject': 'másik projekt',
   'visits.overnight': 'másnap',
 

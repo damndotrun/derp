@@ -54,7 +54,7 @@ export function MinePage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-lg font-semibold tabular-nums">{timeRange(v, tz, t('visits.overnight'))}</span>
                   <StatusBadge status={v.status} />
-                  {v.conflicts.length > 0 && <ConflictBadge />}
+                  {v.conflicts.length > 0 && <ConflictBadge visit={v} timeZone={tz} />}
                 </div>
                 <Link to={`/projects/${v.projectId}`} className="font-medium underline-offset-2 hover:underline">
                   {v.projectName}
