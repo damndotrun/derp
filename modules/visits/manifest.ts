@@ -5,8 +5,9 @@ import type { ModuleManifest } from '@derp/server/module-api';
 export default {
   id: 'visits',
   version: '0.1.0',
+  // Két külön útvonal, egyik sem előtagja a másiknak (a menü NavLinkje az előtagra is kiemelne).
   menu: [
-    { path: '/visits', labelKey: 'visits.menu' },
+    { path: '/visits/schedule', labelKey: 'visits.menu' },
     { path: '/visits/mine', labelKey: 'visits.menuMine' },
   ],
   eventTypes: [
