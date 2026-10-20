@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { createWriteStream } from 'node:fs';
-import { mkdir, rename, rm, stat } from 'node:fs/promises';
+import { mkdir, open, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -50,6 +49,9 @@ export class BlobStore {
     await mkdir(path.dirname(tmp), { recursive: true });
     const hash = createHash('sha256');
     let size = 0;
+    // A fájlt a pipeline előtt nyitjuk meg: ha a stream már a megnyitás előtt hibára fut, a `rm` különben a fájl
+    // létrejötte előtt futna, és üres ideiglenes fájl maradna.
+    const file = await open(tmp, 'wx');
     try {
       await pipeline(
         source,
@@ -61,9 +63,10 @@ export class BlobStore {
             yield chunk;
           }
         },
-        createWriteStream(tmp, { flags: 'wx' }),
+        file.createWriteStream(),
       );
     } catch (err) {
+      await file.close().catch(() => {});
       await rm(tmp, { force: true });
       throw err;
     }
