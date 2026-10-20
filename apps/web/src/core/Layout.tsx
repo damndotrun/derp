@@ -8,7 +8,7 @@ import { api } from './api.ts';
 import { fill, t, translate } from './i18n.ts';
 import { menuBadgeFor, useModules, type MenuBadge } from './modules.ts';
 import { clearOfflineCaches, useOfflineWarmup } from './offline.ts';
-import { outbox } from './outbox.ts';
+import { outbox, useOutboxSync } from './outbox.ts';
 import { OutboxStatus, useOutboxStatus } from './OutboxStatus.tsx';
 import { isAdmin, isOffice, useSession, useUser } from './session.ts';
 import { useEventStream } from './stream.ts';
@@ -64,8 +64,7 @@ function Shell({ user }: { user: User }) {
   useOfflineWarmup(user);
 
   useEffect(() => setOpen(false), [location.pathname]);
-  // A felhasználó offline sora a belépés után (és app-megnyitáskor) indul.
-  useEffect(() => outbox.setUser(user.id), [user.id]);
+  useOutboxSync(user.id);
 
   const logout = async () => {
     const pending = unsynced.waiting.length + unsynced.failed.length;

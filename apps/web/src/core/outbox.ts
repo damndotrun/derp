@@ -11,7 +11,7 @@
 //   szerverhibánál (5xx) később újra próbálkozik. Ha a felhasználó épp most küldte, és a szerver hibával válaszolt, a
 //   hiba az űrlapon jelenik meg, az elem kikerül a sorból (az űrlap ugyanazzal az előkészített elemmel újraküldheti).
 import Dexie, { type EntityTable } from 'dexie';
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { ApiError } from './api.ts';
 
 /** Egy elemfajta küldője (a modul `web/index.ts`-ének `outbox` mezőjéből). Újrajátszva sem duplikálhat. */
@@ -215,9 +215,8 @@ export class Outbox {
     this.handlers.set(kind, handler);
   }
 
-  /** A bejelentkezett felhasználó (a `Layout` állítja); belépés után a sor azonnal indul. */
+  /** A bejelentkezett felhasználó (a `Layout` állítja); belépés (újbóli belépés) után a sor azonnal indul. */
   setUser(userId: string | null): void {
-    if (userId === this.userId) return;
     this.userId = userId;
     this.setSnapshot({ authRequired: null });
     if (userId) void this.run();
@@ -402,6 +401,26 @@ const hasIndexedDb = typeof indexedDB !== 'undefined';
 
 /** Az alkalmazás sora. */
 export const outbox = new Outbox(hasIndexedDb ? new DexieStore() : new MemoryStore());
+
+/**
+ * A bejelentkezett felhasználó sora: belépéskor és app-megnyitáskor, az `online` eseménynél és amikor a lap újra
+ * láthatóvá válik, lejátszik (iOS-en nincs Background Sync, ezért ezek az alkalmak).
+ */
+export function useOutboxSync(userId: string): void {
+  useEffect(() => {
+    outbox.setUser(userId);
+    const kick = () => void outbox.run();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') kick();
+    };
+    window.addEventListener('online', kick);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('online', kick);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [userId]);
+}
 
 /** A sor állapota (élőben frissül, más lapról is). */
 export function useOutbox(): OutboxSnapshot {

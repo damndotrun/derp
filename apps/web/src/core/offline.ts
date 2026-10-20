@@ -8,9 +8,12 @@ import { api } from './api.ts';
 import { registry, modulesKey } from './modules.ts';
 import { TIMELINE_PAGE_SIZE } from './Timeline.tsx';
 
-/** A service worker (`/sw.js`, a buildben) regisztrálása; fejlesztői módban (Vite) nincs. */
+/**
+ * A service worker (`/sw.js`, a `pnpm build` teszi a buildbe) regisztrálása; a Vite fejlesztői szerverén nincs. A
+ * build módja (`MODE`) számít, nem a `NODE_ENV`: az e2e-szerver `NODE_ENV=test` mellett is a buildet szolgálja ki.
+ */
 export function registerServiceWorker(): void {
-  if (!import.meta.env.PROD || typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+  if (import.meta.env.MODE !== 'production' || typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch((err: unknown) => console.warn('A service worker nem regisztrálható', err));
   });

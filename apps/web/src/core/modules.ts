@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from './api.ts';
 import { registerMessages } from './i18n.ts';
+import { useUser } from './session.ts';
 import type { EventRenderer, MenuBadge, ModuleRoute, ProjectLink, WebModule } from './module-types.ts';
 import { outbox as defaultOutbox, type Outbox } from './outbox.ts';
 
@@ -58,8 +59,14 @@ export function useModules() {
   return useQuery({ queryKey: modulesKey, queryFn: api.modules, staleTime: 5 * 60_000 });
 }
 
-/** A bekapcsolt modulok projekt-adatlapi linkjei, a `GET /api/modules` sorrendjében. */
+/**
+ * A bekapcsolt modulok projekt-adatlapi linkjei, a `GET /api/modules` sorrendjében; a `roles`-szal szűkített link csak
+ * a megadott szerepköröknek.
+ */
 export function useProjectLinks(): Array<ProjectLink & { moduleId: string }> {
   const modules = useModules();
-  return (modules.data?.items ?? []).flatMap((m) => registry.projectLinks.filter((l) => l.moduleId === m.id));
+  const role = useUser()?.role;
+  return (modules.data?.items ?? []).flatMap((m) =>
+    registry.projectLinks.filter((l) => l.moduleId === m.id && (!l.roles || (role !== undefined && l.roles.includes(role)))),
+  );
 }
