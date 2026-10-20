@@ -5,8 +5,9 @@ import type { EventRenderer } from './module-types.ts';
 import { registry } from './modules.ts';
 
 /**
- * Egyszerű eseménylista; az összecsukható idővonal a 3. munkacsomagban váltja ki. Az eseménytípus megjelenítőjét a
- * modul adja (`eventRenderers`), ha nincs, az alapértelmezett jelenik meg.
+ * Egyszerű, csoportosítás nélküli eseménylista (pl. egy modul oldalpaneljén néhány eseményhez, vagy a megjelenítők
+ * tesztjeiben); a projekt teljes idővonala a `Timeline`. Az eseménytípus megjelenítőjét a modul adja
+ * (`eventRenderers`), ha nincs, az alapértelmezett jelenik meg.
  */
 export function EventList({
   events,

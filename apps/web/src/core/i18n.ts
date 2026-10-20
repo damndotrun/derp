@@ -104,6 +104,32 @@ export const coreMessages = {
   'common.delete': 'Törlés',
   'events.title': 'Események',
   'events.empty': 'Még nincs esemény.',
+  'timeline.title': 'Idővonal',
+  'timeline.groupBy': 'Csoportosítás',
+  'timeline.byDay': 'Napok',
+  'timeline.byWeek': 'Hetek',
+  'timeline.byType': 'Típus szerint',
+  'timeline.expandAll': 'Mindet kibont',
+  'timeline.collapseAll': 'Mindet összecsuk',
+  'timeline.filter': 'Szűrés típus szerint',
+  'timeline.filterTypes': 'Eseménytípusok',
+  'timeline.clearFilter': 'Szűrő törlése',
+  'timeline.noMatch': 'Nincs a szűrésnek megfelelő esemény.',
+  'timeline.count': '{n} esemény',
+  'timeline.related': '{n} kapcsolódó',
+  'timeline.latest': 'legutóbb {time}',
+  'timeline.more': 'Továbbiak betöltése',
+  'timeline.loadingMore': 'Továbbiak betöltése…',
+  'timeline.today': 'Ma',
+  'timeline.yesterday': 'Tegnap',
+  'timeline.thisWeek': 'Ez a hét',
+  'timeline.lastWeek': 'Múlt hét',
+  'timeline.week': '{n}. hét',
+  'eventType.core.project_created': 'Projekt létrehozva',
+  'eventType.core.project_updated': 'Projekt módosítva',
+  'eventType.core.project_deleted': 'Projekt törölve',
+  'eventType.core.member_added': 'Kolléga hozzárendelve',
+  'eventType.core.member_removed': 'Kolléga levéve',
   'modules.disabled': 'Ez a modul nincs bekapcsolva.',
   'common.loading': 'Betöltés…',
   'common.error': 'Hiba történt',
@@ -115,6 +141,11 @@ const messages: Record<string, string> = { ...coreMessages };
 
 export function t(key: MessageKey): string {
   return coreMessages[key];
+}
+
+/** Helyettesítés a szövegben: `fill('{n} esemény', { n: 3 })` → „3 esemény”. */
+export function fill(text: string, vars: Record<string, string | number>): string {
+  return text.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m));
 }
 
 /** Futásidőben kapott kulcs (pl. menüpont a `GET /api/modules`-ból) fordítása; ismeretlen kulcsnál maga a kulcs. */

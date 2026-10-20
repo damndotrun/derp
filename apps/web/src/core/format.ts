@@ -9,3 +9,8 @@ export function formatDateTime(iso: string, timeZone: string): string {
     minute: '2-digit',
   }).format(new Date(iso));
 }
+
+/** Csak az óra és perc a TZ_DISPLAY időzónában (pl. egy napi csoporton belül). */
+export function formatTime(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat('hu-HU', { timeZone, hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
+}

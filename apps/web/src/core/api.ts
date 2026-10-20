@@ -10,6 +10,7 @@ import type {
   ContactCreate,
   ContactUpdate,
   EventList,
+  EventTypeCounts,
   ModuleList,
   Project,
   ProjectCreate,
@@ -60,7 +61,15 @@ export const api = {
   createProject: (body: ProjectCreate) => request<Project>('POST', '/api/projects', body),
   updateProject: (id: string, body: ProjectUpdate) => request<Project>('PATCH', `/api/projects/${id}`, body),
   deleteProject: (id: string) => request<void>('DELETE', `/api/projects/${id}`),
-  projectEvents: (id: string) => request<EventList>('GET', `/api/projects/${id}/events`),
+  projectEvents: (id: string, q: { limit?: number; before?: string; types?: string[] } = {}) => {
+    const params = new URLSearchParams();
+    if (q.limit) params.set('limit', String(q.limit));
+    if (q.before) params.set('before', q.before);
+    if (q.types?.length) params.set('types', q.types.join(','));
+    const qs = params.toString();
+    return request<EventList>('GET', `/api/projects/${id}/events${qs ? `?${qs}` : ''}`);
+  },
+  projectEventTypes: (id: string) => request<EventTypeCounts>('GET', `/api/projects/${id}/event-types`),
   projectMembers: (id: string) => request<ProjectMemberList>('GET', `/api/projects/${id}/members`),
   addMember: (id: string, userId: string) => request<void>('PUT', `/api/projects/${id}/members/${userId}`),
   removeMember: (id: string, userId: string) => request<void>('DELETE', `/api/projects/${id}/members/${userId}`),

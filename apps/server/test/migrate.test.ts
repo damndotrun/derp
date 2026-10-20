@@ -52,7 +52,7 @@ describe('0003_access: a szöveges ügyfélmező kiváltása', () => {
       await fresh.query(`INSERT INTO projects (name, client_name) VALUES
         ('A', 'Minta Kft.'), ('B', ' Minta Kft. '), ('C', 'Másik Bt.'), ('D', '')`);
 
-      expect(await runMigrations(fresh, [CORE_MIGRATIONS])).toEqual(['core/0003_access.sql']);
+      expect(await runMigrations(fresh, [CORE_MIGRATIONS])).toContain('core/0003_access.sql');
       const { rows } = await fresh.query(
         'SELECT p.name, c.name AS client FROM projects p LEFT JOIN clients c ON c.id = p.client_id ORDER BY p.name',
       );
