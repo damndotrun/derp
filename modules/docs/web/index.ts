@@ -12,4 +12,5 @@ export default {
     { path: '/docs/:projectId', Component: ProjectDocsPage },
   ],
   eventRenderers: { 'docs.file_uploaded': FileUploadedEvent },
+  projectLinks: [{ labelKey: 'docs.menu', to: (projectId) => `/docs/${projectId}` }],
 } satisfies WebModule;

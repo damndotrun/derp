@@ -11,8 +11,9 @@ import { api } from './api.ts';
 import { ClientSelect } from './ClientSelect.tsx';
 import { ContactList } from './ContactList.tsx';
 import { formatDateTime } from './format.ts';
-import { t } from './i18n.ts';
+import { t, translate } from './i18n.ts';
 import { LoadError } from './LoadError.tsx';
+import { useProjectLinks } from './modules.ts';
 import { isOffice, useSession, useUser } from './session.ts';
 import { Timeline } from './Timeline.tsx';
 
@@ -68,6 +69,7 @@ export function ProjectDetailPage() {
           </CardContent>
         )}
       </Card>
+      <ProjectLinks projectId={p.id} />
       <div className="grid gap-4 md:grid-cols-2">
         {p.client && <ClientContacts clientId={p.client.id} />}
         <Members projectId={p.id} canEdit={office} />
@@ -81,6 +83,29 @@ export function ProjectDetailPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+/** A bekapcsolt modulok projekthez tartozó oldalai (dokumentumtár, chat, …). */
+function ProjectLinks({ projectId }: { projectId: string }) {
+  const links = useProjectLinks();
+  if (links.length === 0) return null;
+  return (
+    <nav aria-label={t('projects.links')}>
+      <ul className="flex flex-wrap gap-2">
+        {links.map((l) => (
+          <li key={`${l.moduleId}:${l.labelKey}`}>
+            <Link
+              to={l.to(projectId)}
+              className="inline-flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
+            >
+              {translate(l.labelKey)}
+              {l.Badge && <l.Badge projectId={projectId} />}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }
 

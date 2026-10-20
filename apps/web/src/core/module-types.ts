@@ -8,6 +8,19 @@ export interface EventRendererProps {
 }
 export type EventRenderer = ComponentType<EventRendererProps>;
 
+/**
+ * Link a projekt-adatlapon a modul projekthez tartozó oldalára (pl. dokumentumtár, chat). A felirat i18n-kulcs; a
+ * `Badge` (ha van) a felirat mellé kerül, pl. az olvasatlan üzenetek száma.
+ */
+export interface ProjectLink {
+  labelKey: string;
+  to: (projectId: string) => string;
+  Badge?: ComponentType<{ projectId: string }>;
+}
+
+/** Jelvény egy menüpont felirata mellett (pl. olvasatlan üzenetek); semmit nem jelenít meg, ha nincs mit jelezni. */
+export type MenuBadge = ComponentType;
+
 export interface ModuleRoute {
   /** Kliens oldali útvonal, pl. `/example` vagy `/example/:id`. */
   path: string;
@@ -26,4 +39,8 @@ export interface WebModule {
   routes?: ModuleRoute[];
   /** Eseménytípus (`<id>.<esemény>`) → megjelenítő; ami nincs itt, az alapértelmezett megjelenítővel látszik. */
   eventRenderers?: Record<string, EventRenderer>;
+  /** Linkek a projekt-adatlapon (csak bekapcsolt modulnál látszanak). */
+  projectLinks?: ProjectLink[];
+  /** Menü-útvonal (a manifest `menu[].path`-ja) → jelvény a felirat mellett. */
+  menuBadges?: Record<string, MenuBadge>;
 }
