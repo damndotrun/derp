@@ -3,15 +3,18 @@ import { useCallback, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { api } from '@/core/api.ts';
+import { formatDateTime } from '@/core/format.ts';
 import { t as coreT } from '@/core/i18n.ts';
 import { LoadError } from '@/core/LoadError.tsx';
 import { useModules } from '@/core/modules.ts';
+import { usePendingItems, type OutboxItem } from '@/core/outbox.ts';
 import { useSession } from '@/core/session.ts';
 import { useLiveEvents } from '@/core/stream.ts';
 import type { Note, Survey } from '../shared.ts';
 import { notesApi, notesKey } from './api.ts';
-import { NoteForm, SurveyForm } from './Forms.tsx';
+import { NOTES_OUTBOX, NoteForm, SurveyForm } from './Forms.tsx';
 import { t } from './i18n.ts';
+import type { PreparedNote, PreparedSurvey } from './save.ts';
 import { NoteCard, SurveyCard } from './SurveyView.tsx';
 
 type Item = { kind: 'survey'; at: string; survey: Survey } | { kind: 'note'; at: string; note: Note };
@@ -27,6 +30,11 @@ export function ProjectNotesPage() {
   const project = useQuery({ queryKey: ['projects', projectId], queryFn: () => api.project(projectId), retry: false });
   const notes = useQuery({ queryKey: notesKey(projectId), queryFn: () => notesApi.project(projectId), enabled: project.isSuccess });
   const refresh = useCallback(() => queryClient.invalidateQueries({ queryKey: notesKey(projectId) }), [queryClient, projectId]);
+  // Az offline sorban váró saját felmérések és jegyzetek (még nincsenek a szerveren).
+  const queuedSurveys = usePendingItems(NOTES_OUTBOX.survey, projectId);
+  const queuedNotes = usePendingItems(NOTES_OUTBOX.note, projectId);
+  const saved = new Set([...(notes.data?.surveys ?? []).map((x) => x.id), ...(notes.data?.notes ?? []).map((x) => x.id)]);
+  const queued = [...queuedSurveys, ...queuedNotes].filter((i) => !saved.has(i.id)).sort((a, b) => b.seq! - a.seq!);
   // Új jegyzet, felmérés és a fotók feltöltése (más felhasználótól vagy más lapról) újratöltés nélkül megjelenik.
   useLiveEvents((e) => {
     if (e.projectId === projectId && (e.type.startsWith('notes.') || e.type.startsWith('docs.'))) void refresh();
@@ -49,7 +57,7 @@ export function ProjectNotesPage() {
     ...(notes.data?.notes ?? []).map((note): Item => ({ kind: 'note', at: note.createdAt, note })),
   ].sort((a, b) => b.at.localeCompare(a.at));
 
-  const saved = () => {
+  const onSaved = () => {
     setOpen(null);
     void refresh();
   };
@@ -77,12 +85,22 @@ export function ProjectNotesPage() {
           </Button>
         </div>
       )}
-      {open === 'survey' && <SurveyForm projectId={projectId} onSaved={saved} onCancel={() => setOpen(null)} />}
-      {open === 'note' && <NoteForm projectId={projectId} onSaved={saved} onCancel={() => setOpen(null)} />}
+      {open === 'survey' && <SurveyForm projectId={projectId} onSaved={onSaved} onCancel={() => setOpen(null)} />}
+      {open === 'note' && <NoteForm projectId={projectId} onSaved={onSaved} onCancel={() => setOpen(null)} />}
+
+      {queued.length > 0 && (
+        <ul aria-label={t('notes.queuedItems')} className="flex flex-col gap-3">
+          {queued.map((i) => (
+            <li key={i.id}>
+              <QueuedCard item={i} timeZone={tz} />
+            </li>
+          ))}
+        </ul>
+      )}
 
       {notes.isPending && <p>{coreT('common.loading')}</p>}
       {notes.isError && <p className="text-destructive">{notes.error.message}</p>}
-      {notes.isSuccess && items.length === 0 && <p className="text-muted-foreground">{t('notes.empty')}</p>}
+      {notes.isSuccess && items.length === 0 && queued.length === 0 && <p className="text-muted-foreground">{t('notes.empty')}</p>}
       <ul aria-label={t('notes.items')} className="flex flex-col gap-3">
         {items.map((i) => (
           <li key={i.kind === 'survey' ? i.survey.id : i.note.id}>
@@ -91,5 +109,34 @@ export function ProjectNotesPage() {
         ))}
       </ul>
     </div>
+  );
+}
+
+/** Az offline sorban váró felmérés vagy jegyzet: a fő adatok és „feltöltésre vár” (vagy a hiba). */
+function QueuedCard({ item, timeZone }: { item: OutboxItem; timeZone: string }) {
+  const survey = item.kind === NOTES_OUTBOX.survey ? (item.payload as PreparedSurvey) : null;
+  const note = survey ? null : (item.payload as PreparedNote);
+  const at = (survey ?? note)?.capturedAt ?? item.createdAt;
+  const failed = item.state === 'failed';
+  return (
+    <article aria-label={`${item.label} (${t('notes.queued')})`} className="flex flex-col gap-1 rounded-lg border border-dashed bg-card p-4">
+      <p className="text-sm text-muted-foreground">
+        <time dateTime={at}>{formatDateTime(at, timeZone)}</time> ·{' '}
+        <span className={failed ? 'text-destructive' : undefined}>{failed ? `${t('notes.queuedFailed')}: ${item.error ?? ''}` : t('notes.queued')}</span>
+      </p>
+      {survey ? (
+        <>
+          <h3 className="font-semibold">
+            {t('notes.outboxSurvey')}: {survey.location}
+          </h3>
+          <p className="whitespace-pre-wrap text-sm">{survey.condition}</p>
+          <p className="text-sm text-muted-foreground">
+            {survey.materials.length} {t('notes.queuedMaterials')} · {survey.photos.length} {t('notes.queuedPhotos')}
+          </p>
+        </>
+      ) : (
+        <p className="whitespace-pre-wrap">{note?.body}</p>
+      )}
+    </article>
   );
 }

@@ -1,5 +1,6 @@
 // Feltöltés a dokumentumtárba. A jegyzet/felmérés (5.), a chat (7.) és az offline sor (8.) is ezt használja:
-// előbb `prepareUpload` (kicsinyítés, hash, kliens oldali azonosító), majd `sendUpload` (újraküldhető, idempotens).
+// előbb `prepareUpload` (kicsinyítés, hash, kliens oldali azonosító és időbélyeg), majd `sendUpload` (újraküldhető,
+// idempotens). Az offline sor elemfajtája: `docs.upload` (`web/index.ts`).
 import type { DocsFile } from '../shared.ts';
 import { toApiError } from './api.ts';
 
@@ -64,6 +65,8 @@ export interface UploadOptions {
   folderId?: string | null;
   /** Szülő-esemény (pl. a felmérésé), hogy az idővonalon egy csoportban legyenek. */
   parentEventId?: string | null;
+  /** Kliens oldali időbélyeg (ISO): a fájl és az esemény ideje (offline készült fotónál a terepi időpont). */
+  capturedAt?: string;
 }
 
 /** Feltöltésre kész elem: IndexedDB-be is tehető (a `Blob` tárolható), és újraküldve sem duplikál. */
@@ -87,6 +90,7 @@ export async function prepareUpload(projectId: string, file: File, opts: UploadO
     blob: prepared,
     folderId: opts.folderId ?? null,
     parentEventId: opts.parentEventId ?? null,
+    capturedAt: opts.capturedAt ?? new Date().toISOString(),
   };
 }
 
@@ -96,6 +100,7 @@ export function uploadUrl(u: Omit<PreparedUpload, 'blob'>): string {
   if (u.sha256) q.set('sha256', u.sha256);
   if (u.folderId) q.set('folderId', u.folderId);
   if (u.parentEventId) q.set('parentEventId', u.parentEventId);
+  if (u.capturedAt) q.set('capturedAt', u.capturedAt);
   return `/api/docs/projects/${u.projectId}/files/${u.id}?${q}`;
 }
 

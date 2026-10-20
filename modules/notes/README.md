@@ -16,12 +16,13 @@ látszanak. Mindkettő hozzáfűzés jellegű: nincs szerkesztés és törlés.
 | Végpont | Mire | Jogosultság |
 | --- | --- | --- |
 | `GET /api/notes/projects/:projectId` | a projekt jegyzetei és felmérései (`{ notes, surveys }`, a legújabbal kezdve) | a projektet látja |
-| `PUT /api/notes/projects/:projectId/notes/:noteId` `{ body }` | új jegyzet; új azonosítónál 201, ugyanazzal újraküldve 200, eltérő tartalommal (szerzővel, projekttel) 409 | `notes.write` |
-| `PUT /api/notes/projects/:projectId/surveys/:surveyId` `{ location, condition, proposedWork, materials, photos? }` | új felmérés; hiányzó kötelező mező 400, idempotencia mint fent; másik projekt fotója 400 | `notes.write` |
+| `PUT /api/notes/projects/:projectId/notes/:noteId` `{ body, capturedAt? }` | új jegyzet; új azonosítónál 201, ugyanazzal újraküldve 200, eltérő tartalommal (szerzővel, projekttel) 409 | `notes.write` |
+| `PUT /api/notes/projects/:projectId/surveys/:surveyId` `{ location, condition, proposedWork, materials, photos?, capturedAt? }` | új felmérés; hiányzó kötelező mező 400, idempotencia mint fent; másik projekt fotója 400 | `notes.write` |
 | `GET /api/notes/surveys/:surveyId` | egy felmérés | a felmérés projektjét látja |
 
 `notes.write`: admin, iroda, terepes. Minden végpont `ctx.requireProject`-tel indul: a terepes a nem hozzá rendelt
-projektre 403-at kap. A felmérés fotói állapottal jönnek vissza: `ready` (a dokumentumtárban), `pending` (még nem
+projektre 403-at kap. A `capturedAt` a terepi időpont (a rekord `createdAt`-je és az esemény `occurredAt`-je,
+lásd a modules/README „Terepi mód” részét). A felmérés fotói állapottal jönnek vissza: `ready` (a dokumentumtárban), `pending` (még nem
 töltődött fel, pl. offline sorban vár), `deleted` (azóta törölték a dokumentumtárból).
 
 ## Események
@@ -38,5 +39,8 @@ töltődött fel, pl. offline sorban vár), `deleted` (azóta törölték a doku
 - `web/save.ts` (az offline sornak, 8.): `prepareSurvey(projectId, fields, files)` → `PreparedSurvey` (kliens
   UUID-k, 2560 px-re kicsinyített fotók; IndexedDB-be tehető, a felmérés és a fotói egy elem), `sendSurvey(prepared)`
   (előbb a felmérés, utána a fotók a dokumentumtár „Felmérések” mappájába `parentEventId`-vel; újrajátszva sem
-  duplikál); `prepareNote` / `sendNote` ugyanígy. 401-nél a mag `ApiError`-ját dobják.
+  duplikál; a fotók a felmérés `capturedAt`-jét kapják); `prepareNote` / `sendNote` ugyanígy. 401-nél a mag
+  `ApiError`-ját dobják.
+- Offline sor (8.): elemfajták `notes.survey` és `notes.note`; az űrlapok ezen át küldenek, a sorban várakozó elem a
+  lista elején „feltöltésre vár” kártyaként látszik.
 - `web/SurveyView.tsx`: `SurveyCard`, `MaterialsTable` (pl. az ajánlat oldalpaneljéhez, 10.).

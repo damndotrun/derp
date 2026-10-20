@@ -8,6 +8,7 @@ import { formatDateTime } from '@/core/format.ts';
 import { t as coreT } from '@/core/i18n.ts';
 import { LoadError } from '@/core/LoadError.tsx';
 import { useModules } from '@/core/modules.ts';
+import { submit as submitOutbox, usePendingItems, type OutboxItem } from '@/core/outbox.ts';
 import { useSession, useUser } from '@/core/session.ts';
 import { useLiveEvents } from '@/core/stream.ts';
 import { cn } from '@/lib/utils';
@@ -17,7 +18,15 @@ import { CHAT_EVENTS, type ChatAttachment, type ChatMessage, type MessagePage, t
 import { chatApi, chatKey, unreadKey } from './api.ts';
 import { t } from './i18n.ts';
 import { matchPeople, mentionQuery, splitMentions } from './mentions.ts';
-import { prepareMessage, sendMessage, type PreparedMessage } from './send.ts';
+import { prepareMessage, type PreparedMessage } from './send.ts';
+
+/** Az offline sor elemfajtája (`web/index.ts`). */
+const CHAT_OUTBOX = 'chat.message';
+
+const outboxLabel = (m: PreparedMessage) => {
+  const text = m.body.replace(/\s+/g, ' ');
+  return `${t('chat.outboxLabel')}: ${text.length > 60 ? `${text.slice(0, 59)}…` : text || m.attachments.map((a) => a.name).join(', ')}`;
+};
 
 /** Egy projekt chatje: üzenetek (élőben frissül), olvasottság, írás @említéssel és csatolmánnyal. */
 export function ProjectChatPage() {
@@ -42,6 +51,12 @@ export function ProjectChatPage() {
   });
 
   const items = useMemo(() => (messages.data?.pages ?? []).toReversed().flatMap((p) => p.items), [messages.data]);
+  // A saját, offline sorban váró üzenetek (még nincsenek a szerveren) a lista végén.
+  const pendingItems = usePendingItems(CHAT_OUTBOX, projectId);
+  const queued = useMemo(() => {
+    const sent = new Set(items.map((m) => m.id));
+    return pendingItems.filter((i) => !sent.has(i.id));
+  }, [items, pendingItems]);
   const latest = messages.data?.pages[0];
   useMarkRead(projectId, items.at(-1)?.seq ?? 0, latest?.lastReadSeq ?? 0);
 
@@ -80,6 +95,7 @@ export function ProjectChatPage() {
 
       <MessageList
         items={items}
+        queued={queued}
         page={latest}
         me={user?.id ?? ''}
         timeZone={tz}
@@ -119,6 +135,7 @@ function useMarkRead(projectId: string, newest: number, lastRead: number) {
 
 function MessageList(props: {
   items: ChatMessage[];
+  queued: OutboxItem[];
   page: MessagePage | undefined;
   me: string;
   timeZone: string;
@@ -129,9 +146,9 @@ function MessageList(props: {
   loadingOlder: boolean;
   onOlder: () => void;
 }) {
-  const { items, page, me, timeZone, firstUnread } = props;
+  const { items, queued, page, me, timeZone, firstUnread } = props;
   const scroller = useRef<HTMLDivElement>(null);
-  const newest = items.at(-1)?.id;
+  const newest = queued.at(-1)?.id ?? items.at(-1)?.id;
 
   // Új üzenetnél (és megnyitáskor) az aljára görget.
   useLayoutEffect(() => {
@@ -160,7 +177,7 @@ function MessageList(props: {
       )}
       {props.loading && <p>{coreT('common.loading')}</p>}
       {props.error && <p className="text-destructive">{props.error.message}</p>}
-      {!props.loading && items.length === 0 && <p className="text-sm text-muted-foreground">{t('chat.empty')}</p>}
+      {!props.loading && items.length === 0 && queued.length === 0 && <p className="text-sm text-muted-foreground">{t('chat.empty')}</p>}
       <ol aria-label={t('chat.messages')} className="flex flex-col gap-3">
         {items.map((m) => (
           <li key={m.id} className="flex flex-col gap-1">
@@ -179,8 +196,41 @@ function MessageList(props: {
             )}
           </li>
         ))}
+        {queued.map((i) => (
+          <li key={i.id} className="flex flex-col gap-1">
+            <QueuedMessage item={i} timeZone={timeZone} />
+          </li>
+        ))}
       </ol>
     </div>
+  );
+}
+
+/** Az offline sorban váró saját üzenet: a szöveg és a csatolmányok neve, „feltöltésre vár” (vagy a hiba) jelzéssel. */
+function QueuedMessage({ item, timeZone }: { item: OutboxItem; timeZone: string }) {
+  const m = item.payload as PreparedMessage;
+  const user = useUser();
+  const failed = item.state === 'failed';
+  return (
+    <article
+      aria-label={`${user?.name ?? ''}: ${m.body || m.attachments.map((a) => a.name).join(', ')}`}
+      className="flex max-w-[85%] flex-col gap-1 self-end rounded-lg border border-dashed bg-primary/5 px-3 py-2"
+    >
+      <p className="text-xs text-muted-foreground">
+        <span className="font-medium text-foreground">{user?.name}</span> · <time dateTime={m.capturedAt ?? item.createdAt}>{formatDateTime(m.capturedAt ?? item.createdAt, timeZone)}</time> ·{' '}
+        <span className={cn(failed && 'text-destructive')}>{failed ? `${t('chat.queuedFailed')}: ${item.error ?? ''}` : t('chat.queued')}</span>
+      </p>
+      {m.body && <p className="whitespace-pre-wrap break-words">{m.body}</p>}
+      {m.attachments.length > 0 && (
+        <ul aria-label={t('chat.attachments')} className="flex flex-wrap gap-2">
+          {m.attachments.map((a) => (
+            <li key={a.id} className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-sm text-muted-foreground">
+              📎 {a.name}
+            </li>
+          ))}
+        </ul>
+      )}
+    </article>
   );
 }
 
@@ -285,11 +335,12 @@ function Composer({ projectId, onSent }: { projectId: string; onSent: () => Prom
     try {
       const m = prepared ?? (await prepareMessage(projectId, text, files));
       setPending(m);
-      await sendMessage(m);
+      // Az offline soron át: hálózat nélkül a sorban vár (a lista végén „feltöltésre vár”), és magától felmegy.
+      const outcome = await submitOutbox(CHAT_OUTBOX, m, { id: m.id, projectId, label: outboxLabel(m) });
       setPending(null);
       setText('');
       setFiles([]);
-      await onSent();
+      if (outcome.status === 'sent') await onSent();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -326,8 +377,11 @@ function Composer({ projectId, onSent }: { projectId: string; onSent: () => Prom
     }
   };
 
+  // A fájlokat azonnal ki kell venni a `FileList`-ből: a hívó utána üríti a mezőt (`value = ''`), ami a listát is
+  // kiüríti. Ha a frissítő függvény csak később futna le (React nem mindig számolja ki azonnal), üres lenne.
   const addFiles = (list: FileList | null) => {
-    if (list) setFiles((f) => [...f, ...Array.from(list)]);
+    const picked = Array.from(list ?? []);
+    if (picked.length > 0) setFiles((f) => [...f, ...picked]);
   };
 
   return (

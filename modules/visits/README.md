@@ -54,7 +54,8 @@ törölve”); `data`: `visitId`, `startsAt`, `endsAt`, `address`, `task`, `stat
 
 - `/visits/schedule` „Kiszállások”: napi/heti nézet (asztalon táblázat kollégánként, telefonon naponkénti lista),
   kollégaszűrő, az irodának új kiszállás űrlapja és kattintásra szerkesztés/törlés, a saját ICS-link kezelése.
-- `/visits/mine` „Mai kiszállásaim”: a nap kiszállásai kártyákon (`?date=` és lapozás más napra).
+- `/visits/mine` „Mai kiszállásaim”: a nap kiszállásai kártyákon (`?date=` és lapozás más napra). Terepi mód (8.): a
+  `GET /api/visits/mine` a modul `offlineUrls`-a, így a terepesnél belépéskor előtöltődik és térerő nélkül is látszik.
 - Az élő frissítés a `visits.*` és a hozzárendelés-eseményekre újratölti a nézeteket.
 
 ## Konfiguráció

@@ -6,6 +6,7 @@ import type { Config } from './config.ts';
 import type { Db } from './db.ts';
 import { visibleProjectIds } from './access.ts';
 import { recordView, writeAudit } from './audit.ts';
+import { clientTime } from './client-time.ts';
 import { badRequest, conflict, forbidden, notFound, unauthorized } from './errors.ts';
 import { appendEvent } from './events.ts';
 import type { ModuleContext, ModuleSeedContext } from './module-api.ts';
@@ -53,6 +54,7 @@ export function createModuleContext(m: LoadedModule, db: Db, pool: pg.Pool, conf
         if (!req.user || !roles.includes(req.user.role)) throw forbidden();
       };
     },
+    clientTime: (capturedAt) => clientTime(capturedAt),
     errors: {
       badRequest,
       notFound,

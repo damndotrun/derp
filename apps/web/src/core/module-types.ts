@@ -1,6 +1,7 @@
 // A modulok kliens oldali felülete (csak típusok, hogy a modulok importja ne hozzon körkörös függést a regiszterrel).
 import type { ComponentType } from 'react';
-import type { TimelineEvent } from '@derp/shared';
+import type { Role, TimelineEvent } from '@derp/shared';
+import type { OutboxHandler } from './outbox.ts';
 
 export interface EventRendererProps {
   event: TimelineEvent;
@@ -16,6 +17,8 @@ export interface ProjectLink {
   labelKey: string;
   to: (projectId: string) => string;
   Badge?: ComponentType<{ projectId: string }>;
+  /** Csak ezeknek a szerepköröknek látszik (pl. az ajánlat a terepesnek nem); ha nincs megadva, mindenkinek. */
+  roles?: Role[];
 }
 
 /** Jelvény egy menüpont felirata mellett (pl. olvasatlan üzenetek); semmit nem jelenít meg, ha nincs mit jelezni. */
@@ -43,4 +46,17 @@ export interface WebModule {
   projectLinks?: ProjectLink[];
   /** Menü-útvonal (a manifest `menu[].path`-ja) → jelvény a felirat mellett. */
   menuBadges?: Record<string, MenuBadge>;
+  /**
+   * Az offline sor elemfajtái (`<id>.<fajta>` → küldő), pl. `'chat.message': { send: sendMessage }`. A felület a
+   * `submit(fajta, előkészített elem, …)`-tel (`@/core/outbox.ts`) küld; a küldő újrajátszva sem duplikálhat.
+   */
+  outbox?: Record<string, OutboxHandler>;
+  /**
+   * Terepi gyorsítótár (a terepesnek, belépéskor): a modul olvasó végpontjai, amelyek offline is kellenek. A címek
+   * pontosan egyezzenek a felület kéréseivel (lekérdezési paraméterekkel együtt).
+   */
+  offlineUrls?: {
+    global?: string[];
+    project?: (projectId: string) => string[];
+  };
 }

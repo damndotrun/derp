@@ -21,5 +21,5 @@ export default {
     'quotes.status_changed': QuoteEvent,
     'quotes.pdf_created': QuoteEvent,
   },
-  projectLinks: [{ labelKey: 'quotes.projectLink', to: (projectId) => `/quotes/projects/${projectId}` }],
+  projectLinks: [{ labelKey: 'quotes.projectLink', to: (projectId) => `/quotes/projects/${projectId}`, roles: ['admin', 'iroda'] }],
 } satisfies WebModule;

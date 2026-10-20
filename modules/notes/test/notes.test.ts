@@ -255,3 +255,50 @@ describe('notes: lista és jogosultság', () => {
     expect((await requester(ctx.app)('GET', `/api/notes/projects/${pid}`)).statusCode).toBe(401);
   });
 });
+
+describe('notes: kliens oldali időbélyeg (capturedAt, offline sor)', () => {
+  const agoIso = (ms: number) => new Date(Date.now() - ms).toISOString();
+  type Ev = EventItem & { occurredAt: string };
+  const occurred = async (pid: string, type: string) => ((await events(pid)) as Ev[]).find((e) => e.type === type)!.occurredAt;
+
+  it('az offline kitöltött felmérés és fotói, valamint a jegyzet a terepi időponttal kerülnek az idővonalra', async () => {
+    const pid = await project('Felmérés: terepi időpont');
+    const at = agoIso(2 * 3_600_000);
+    const photoId = crypto.randomUUID();
+    const res = await putSurvey(iroda, pid, survey({ photos: [{ id: photoId, name: 'foto.jpg' }], capturedAt: at }));
+    expect(res.statusCode).toBe(201);
+    expect((res.json() as Survey).createdAt).toBe(at);
+    expect(await occurred(pid, 'notes.survey_added')).toBe(at);
+    expect((await upload(iroda, pid, photoId, { parentEventId: res.json().eventId, capturedAt: at })).statusCode).toBe(201);
+    expect(await occurred(pid, 'docs.file_uploaded')).toBe(at);
+
+    const noteAt = agoIso(90 * 60_000);
+    const note = await putNote(iroda, pid, { body: 'Offline írva', capturedAt: noteAt });
+    expect((note.json() as Note).createdAt).toBe(noteAt);
+    expect(await occurred(pid, 'notes.note_added')).toBe(noteAt);
+  });
+
+  it('jövőbeli időpont helyett a szerver ideje; 30 napnál régebbi helyett a szerverre érkezésé', async () => {
+    const pid = await project('Felmérés: időbélyeg korlátai');
+    const before = Date.now();
+    await putNote(iroda, pid, { body: 'Siető óra', capturedAt: new Date(Date.now() + 3_600_000).toISOString() });
+    await putSurvey(iroda, pid, survey({ capturedAt: agoIso(31 * 24 * 3_600_000) }));
+    for (const type of ['notes.note_added', 'notes.survey_added']) {
+      const t = Date.parse(await occurred(pid, type));
+      expect(t).toBeGreaterThanOrEqual(before - 1_000);
+      expect(t).toBeLessThanOrEqual(Date.now() + 1_000);
+    }
+  });
+
+  it('újraküldve más időbélyeggel is ugyanaz a rekord (200), az első időponttal; érvénytelen formátum 400', async () => {
+    const pid = await project('Felmérés: időbélyeg újraküldéskor');
+    const id = crypto.randomUUID();
+    const first = agoIso(3_600_000);
+    expect((await putNote(iroda, pid, { body: 'Kétszer küldve', capturedAt: first }, id)).statusCode).toBe(201);
+    const again = await putNote(iroda, pid, { body: 'Kétszer küldve', capturedAt: agoIso(60_000) }, id);
+    expect(again.statusCode).toBe(200);
+    expect((again.json() as Note).createdAt).toBe(first);
+    expect((await events(pid)).filter((e) => e.type === 'notes.note_added')).toHaveLength(1);
+    expect((await putNote(iroda, pid, { body: 'Rossz idő', capturedAt: 'tegnap' })).statusCode).toBe(400);
+  });
+});

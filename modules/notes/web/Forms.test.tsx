@@ -61,6 +61,7 @@ describe('felmérés-űrlap', () => {
           { name: 'Légcsatorna', quantity: 2.5, unit: 'fm' },
         ],
         photos: [],
+        capturedAt: expect.any(String),
       },
     ]);
   });

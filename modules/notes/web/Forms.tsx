@@ -4,9 +4,18 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { fill } from '@/core/i18n.ts';
+import { submit as submitOutbox } from '@/core/outbox.ts';
 import type { Note, Survey } from '../shared.ts';
 import { t } from './i18n.ts';
-import { parseQuantity, prepareNote, prepareSurvey, sendNote, sendSurvey, type PreparedNote, type PreparedSurvey } from './save.ts';
+import { parseQuantity, prepareNote, prepareSurvey, type PreparedNote, type PreparedSurvey, type SurveyProgress } from './save.ts';
+
+/** Az offline sor elemfajtái (`web/index.ts`). */
+export const NOTES_OUTBOX = { survey: 'notes.survey', note: 'notes.note' } as const;
+
+const short = (s: string, max = 60) => {
+  const line = s.replace(/\s+/g, ' ').trim();
+  return line.length > max ? `${line.slice(0, max - 1)}…` : line;
+};
 
 interface MaterialRow {
   key: number;
@@ -93,9 +102,10 @@ function PhotoInputs({ disabled, onAdd }: { disabled: boolean; onAdd: (files: Fi
 
 /**
  * Új felmérés: a kötelező mezők (helyszín, észlelt állapot, javasolt munka, becsült anyag tételesen) és a fotók. Hiba
- * után az „Újra” ugyanazokkal az azonosítókkal küld, így sem a felmérés, sem a fotók nem duplikálódnak.
+ * után az „Újra” ugyanazokkal az azonosítókkal küld, így sem a felmérés, sem a fotók nem duplikálódnak. Az offline
+ * soron át megy: hálózat nélkül a felmérés a fotóival a telefonon vár (`onSaved()` felmérés nélkül), és magától felmegy.
  */
-export function SurveyForm({ projectId, onSaved, onCancel }: { projectId: string; onSaved: (s: Survey) => void; onCancel: () => void }) {
+export function SurveyForm({ projectId, onSaved, onCancel }: { projectId: string; onSaved: (s?: Survey) => void; onCancel: () => void }) {
   const id = useId();
   const nextKey = useRef(1);
   const [location, setLocation] = useState('');
@@ -131,9 +141,14 @@ export function SurveyForm({ projectId, onSaved, onCancel }: { projectId: string
         ));
       setPending(s);
       setProgress(s.photos.length > 0 ? { done: 0, total: s.photos.length } : null);
-      const { survey } = await sendSurvey(s, (p) => setProgress({ done: p.uploaded, total: s.photos.length }));
+      const outcome = await submitOutbox(
+        NOTES_OUTBOX.survey,
+        s,
+        { id: s.id, projectId, label: `${t('notes.outboxSurvey')}: ${short(s.location)}` },
+        { onProgress: (p) => setProgress({ done: (p as SurveyProgress).uploaded, total: s.photos.length }) },
+      );
       setPending(null);
-      onSaved(survey);
+      onSaved(outcome.status === 'sent' ? (outcome.result as { survey: Survey }).survey : undefined);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -312,7 +327,7 @@ export function SurveyForm({ projectId, onSaved, onCancel }: { projectId: string
 }
 
 /** Új szabad szöveges helyszíni jegyzet; hiba után az „Újra” ugyanazzal az azonosítóval küld. */
-export function NoteForm({ projectId, onSaved, onCancel }: { projectId: string; onSaved: (n: Note) => void; onCancel: () => void }) {
+export function NoteForm({ projectId, onSaved, onCancel }: { projectId: string; onSaved: (n?: Note) => void; onCancel: () => void }) {
   const id = useId();
   const [body, setBody] = useState('');
   const [pending, setPending] = useState<PreparedNote | null>(null);
@@ -330,9 +345,9 @@ export function NoteForm({ projectId, onSaved, onCancel }: { projectId: string; 
     try {
       const n = pending ?? prepareNote(projectId, body);
       setPending(n);
-      const note = await sendNote(n);
+      const outcome = await submitOutbox(NOTES_OUTBOX.note, n, { id: n.id, projectId, label: `${t('notes.outboxNote')}: ${short(n.body)}` });
       setPending(null);
-      onSaved(note);
+      onSaved(outcome.status === 'sent' ? (outcome.result as Note) : undefined);
     } catch (err) {
       setError((err as Error).message);
     } finally {

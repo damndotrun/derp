@@ -13,6 +13,12 @@ export const MessageCreate = z
   .object({
     body: z.string().trim().max(MAX_BODY).default(''),
     attachments: z.array(AttachmentRef).max(MAX_ATTACHMENTS).default([]),
+    /**
+     * Kliens oldali időbélyeg (pl. offline írt üzenet): ez lesz az üzenet és az esemény ideje (a jövőbeli helyett a
+     * szerver ideje, a 30 napnál régebbit a szerver nem veszi figyelembe). A sorrend (`seq`) a szerverre érkezésé
+     * marad; az újraküldés összevetésében nem számít.
+     */
+    capturedAt: z.iso.datetime({ offset: true }).optional(),
   })
   .refine((m) => m.body.length > 0 || m.attachments.length > 0, 'Üres üzenet nem küldhető')
   .refine((m) => new Set(m.attachments.map((a) => a.id)).size === m.attachments.length, 'Egy fájl kétszer szerepel');

@@ -1,6 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { renderHook } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
+import { describe, expect, it, vi } from 'vitest';
+import type { Role } from '@derp/shared';
 import { translate } from './i18n.ts';
-import { buildRegistry, registry } from './modules.ts';
+import { buildRegistry, modulesKey, registry, useProjectLinks } from './modules.ts';
+import { sessionKey } from './session.ts';
 
 const Dummy = () => null;
 
@@ -35,5 +40,26 @@ describe('modulregiszter', () => {
     expect(r.projectLinks).toEqual([expect.objectContaining({ moduleId: 'epsilon', labelKey: 'epsilon.menu' })]);
     expect(r.projectLinks[0]!.to('p1')).toBe('/epsilon/p1');
     expect(r.menuBadges.get('epsilon:/epsilon')).toBe(Dummy);
+  });
+
+  it('az offline sor elemfajtáit beírja a sorba, de csak a saját előtaggal', () => {
+    const box = { register: vi.fn() };
+    const send = async () => undefined;
+    buildRegistry([{ id: 'zeta', messages: {}, outbox: { 'zeta.item': { send } } }], box);
+    expect(box.register).toHaveBeenCalledWith('zeta.item', { send });
+    expect(() => buildRegistry([{ id: 'eta', messages: {}, outbox: { 'docs.upload': { send } } }], box)).toThrow(/docs\.upload/);
+  });
+
+  it('a szerepkörhöz kötött projektlinket (árajánlatok) csak az irodai szerepkörök kapják meg', () => {
+    const linksFor = (role: Role) => {
+      const client = new QueryClient();
+      client.setQueryData(modulesKey, { items: [{ id: 'quotes', menu: [] }] });
+      client.setQueryData(sessionKey, { user: { id: 'u1', role } });
+      const wrapper = ({ children }: { children: ReactNode }) => createElement(QueryClientProvider, { client }, children);
+      return renderHook(() => useProjectLinks(), { wrapper }).result.current.map((l) => l.labelKey);
+    };
+    expect(linksFor('admin')).toEqual(['quotes.projectLink']);
+    expect(linksFor('iroda')).toEqual(['quotes.projectLink']);
+    expect(linksFor('terepes')).toEqual([]);
   });
 });

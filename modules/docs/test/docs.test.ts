@@ -308,3 +308,21 @@ describe('docs modul: jogosultság', () => {
     expect((await as(admin)('GET', `/api/docs/projects/${crypto.randomUUID()}`)).statusCode).toBe(404);
   });
 });
+
+describe('docs modul: kliens oldali időbélyeg (capturedAt, offline sor)', () => {
+  it('az offline készült fotó ideje a terepi időpont (fájl és esemény); újraküldve más időbélyeggel is ugyanaz', async () => {
+    const pid = await project('Docs: terepi időpont');
+    const at = new Date(Date.now() - 3 * 3_600_000).toISOString();
+    const id = crypto.randomUUID();
+    const body = await photo(10, 200, 30);
+    const res = await upload(admin, pid, body, { name: 'terep.jpg', type: 'image/jpeg', capturedAt: at }, id);
+    expect(res.statusCode).toBe(201);
+    expect(res.json().createdAt).toBe(at);
+    const again = await upload(admin, pid, body, { name: 'terep.jpg', type: 'image/jpeg', capturedAt: new Date().toISOString() }, id);
+    expect(again.statusCode).toBe(200);
+    expect(again.json().createdAt).toBe(at);
+    const evs = (await as(admin)('GET', `/api/projects/${pid}/events`)).json().items as Array<{ type: string; occurredAt: string }>;
+    expect(evs.filter((e) => e.type === 'docs.file_uploaded').map((e) => e.occurredAt)).toEqual([at]);
+    expect((await upload(admin, pid, body, { name: 'rossz.jpg', capturedAt: 'tegnap' })).statusCode).toBe(400);
+  });
+});

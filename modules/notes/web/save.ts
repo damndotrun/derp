@@ -1,6 +1,6 @@
 // Jegyzet és felmérés mentése. Az offline sor (8.) is ezt használja: előbb `prepareNote` / `prepareSurvey` (kliens
-// oldali azonosítók, kicsinyített fotók; az eredmény IndexedDB-be tehető), majd `sendNote` / `sendSurvey` (újrajátszva
-// sem duplikál). A felmérés és a fotói egy elem.
+// oldali azonosítók és időbélyeg, kicsinyített fotók; az eredmény IndexedDB-be tehető), majd `sendNote` /
+// `sendSurvey` (újrajátszva sem duplikál). A felmérés és a fotói egy elem (`notes.survey`), a jegyzet `notes.note`.
 import { ApiError } from '@/core/api.ts';
 import type { DocsFile } from '../../docs/shared.ts';
 import { docsApi } from '../../docs/web/api.ts';
@@ -12,14 +12,16 @@ export interface PreparedNote {
   id: string;
   projectId: string;
   body: string;
+  /** Kliens oldali időbélyeg (ISO): offline írt jegyzetnél a terepi időpont lesz az esemény ideje. */
+  capturedAt?: string;
 }
 
 export function prepareNote(projectId: string, body: string): PreparedNote {
-  return { id: newId(), projectId, body: body.trim() };
+  return { id: newId(), projectId, body: body.trim(), capturedAt: new Date().toISOString() };
 }
 
 export function sendNote(n: PreparedNote): Promise<Note> {
-  return notesApi.saveNote(n.projectId, n.id, { body: n.body });
+  return notesApi.saveNote(n.projectId, n.id, { body: n.body, capturedAt: n.capturedAt });
 }
 
 export interface SurveyFields {
@@ -34,9 +36,12 @@ export interface PreparedSurvey extends SurveyFields {
   projectId: string;
   /** A fotók a dokumentumtárba; a mappát és a szülő-eseményt a küldés tölti ki. */
   photos: PreparedUpload[];
+  /** Kliens oldali időbélyeg (ISO): offline kitöltött felmérésnél a terepi időpont (a fotóké is ez). */
+  capturedAt?: string;
 }
 
 export async function prepareSurvey(projectId: string, fields: SurveyFields, files: File[] = []): Promise<PreparedSurvey> {
+  const capturedAt = new Date().toISOString();
   return {
     id: newId(),
     projectId,
@@ -44,7 +49,8 @@ export async function prepareSurvey(projectId: string, fields: SurveyFields, fil
     condition: fields.condition.trim(),
     proposedWork: fields.proposedWork.trim(),
     materials: fields.materials.map((m) => ({ name: m.name.trim(), quantity: m.quantity, unit: m.unit.trim() })),
-    photos: await Promise.all(files.map((f) => prepareUpload(projectId, f))),
+    photos: await Promise.all(files.map((f) => prepareUpload(projectId, f, { capturedAt }))),
+    capturedAt,
   };
 }
 
@@ -83,13 +89,14 @@ export async function sendSurvey(s: PreparedSurvey, onProgress?: (p: SurveyProgr
     proposedWork: s.proposedWork,
     materials: s.materials,
     photos: s.photos.map((p) => ({ id: p.id, name: p.name })),
+    capturedAt: s.capturedAt,
   });
   onProgress?.({ survey, uploaded: 0 });
   const files: DocsFile[] = [];
   if (s.photos.length > 0) {
     const folderId = await surveyFolderId(s.projectId);
     for (const p of s.photos) {
-      files.push(await sendUpload({ ...p, folderId, parentEventId: survey.eventId }));
+      files.push(await sendUpload({ ...p, folderId, parentEventId: survey.eventId, capturedAt: s.capturedAt ?? p.capturedAt }));
       onProgress?.({ survey, uploaded: files.length });
     }
   }

@@ -15,7 +15,7 @@ frissülés, olvasatlan-jelvény a menüben és a projekt-adatlap „Chat” lin
 | Végpont | Mire | Jogosultság |
 | --- | --- | --- |
 | `GET /api/chat/projects/:projectId/messages?before=&limit=` | üzenetek `seq` szerint növekvő sorrendben, lapozva (`MessagePage`: `nextBefore`, saját `lastReadSeq`, a többiek olvasottsága `reads`) | a projektet látja |
-| `PUT /api/chat/projects/:projectId/messages/:messageId` `{ body, attachments? }` | új üzenet: 201; ugyanazzal az azonosítóval és tartalommal 200 (ugyanaz az üzenet); más tartalom, szerző vagy projekt 409; másik projekt fájlja csatolmányként 400 | `chat.post` (minden szerepkör) |
+| `PUT /api/chat/projects/:projectId/messages/:messageId` `{ body, attachments?, capturedAt? }` | új üzenet (a `capturedAt` a terepi időpont, a `createdAt`-be kerül; a `seq` a beérkezés sorrendje): 201; ugyanazzal az azonosítóval és tartalommal 200 (ugyanaz az üzenet); más tartalom, szerző vagy projekt 409; másik projekt fájlja csatolmányként 400 | `chat.post` (minden szerepkör) |
 | `PUT /api/chat/projects/:projectId/read` `{ seq }` | olvasott eddig (csak előre, legfeljebb a projekt utolsó üzenetéig) | a projektet látja |
 | `GET /api/chat/projects/:projectId/people` | akik említhetők (aktív irodai felhasználók és a projekthez rendeltek) | a projektet látja |
 | `GET /api/chat/unread` | olvasatlan üzenetek a látható, nem törölt projektekben (`total`, `mentions`, projektenként `unread`, `mentions`, `lastMessageAt`); a saját üzenet nem számít | belépve |
@@ -44,6 +44,8 @@ után a projektet látók közül lehet választani; a megemlített név kiemelv
   `blob`-ok miatt IndexedDB-be tehető);
 - `sendMessage(prepared)`: előbb az üzenet (idempotens `PUT`), utána a csatolmányok a „Chat” mappába, az üzenet
   eseménye alá. Megszakadás után ugyanazzal a `PreparedMessage`-dzsel újrahívható, nem duplikál.
+- Elemfajta: `chat.message`; a chat írómezője ezen át küld, a sorban várakozó üzenet „feltöltésre vár” jelöléssel a
+  lista végén látszik.
 
 ## Felület
 
