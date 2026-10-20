@@ -26,7 +26,7 @@ die() { echo "HIBA: $*" >&2; exit 1; }
 for f in "$SECRETS/.env" "$SECRETS/db.env"; do
   [ -f "$f" ] || die "hiányzik: $f (első telepítés előtt létre kell hozni, ld. docs/telepites.md)"
 done
-for k in DATABASE_URL SESSION_SECRET GOOGLE_LOGIN_CLIENT_ID GOOGLE_LOGIN_CLIENT_SECRET; do
+for k in DATABASE_URL SESSION_SECRET GOOGLE_LOGIN_CLIENT_ID GOOGLE_LOGIN_CLIENT_SECRET ICS_TOKEN_PEPPER; do
   grep -q "^$k=." "$SECRETS/.env" || die "üres vagy hiányzó kulcs a .env-ben: $k"
 done
 grep -q '^POSTGRES_PASSWORD=.' "$SECRETS/db.env" || die "üres vagy hiányzó kulcs a db.env-ben: POSTGRES_PASSWORD"
