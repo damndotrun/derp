@@ -206,8 +206,8 @@ describe('watch modul: bejárás ideiglenes könyvtárral', () => {
     expect((await as(iroda)('GET', `/api/watch/projects/${pid}`)).json().mapping.lastError).toBeNull();
   });
 
-  it('olvashatatlan almappa: a bejárás hibát ad, a fájljai nem látszanak töröltnek', async () => {
-    if (process.getuid?.() === 0) return; // root mindent olvas
+  // Rootként minden könyvtár olvasható, ott ez a teszt kimarad.
+  it.skipIf(process.getuid?.() === 0)('olvashatatlan almappa: a bejárás hibát ad, a fájljai nem látszanak töröltnek', async () => {
     const { chmod } = await import('node:fs/promises');
     const pid = await project('Watch: olvashatatlan');
     await put('Projektek/Zart/Belso/a.txt', 'a');
