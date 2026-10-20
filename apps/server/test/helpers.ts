@@ -4,6 +4,8 @@ import { inject } from 'vitest';
 import { buildApp } from '../src/app.ts';
 import { loadConfig, type Config } from '../src/core/config.ts';
 import { createDb, createPool, type Db } from '../src/core/db.ts';
+import { seedModules } from '../src/core/module-host.ts';
+import { loadModules } from '../src/core/modules.ts';
 import { seedE2E } from '../src/core/seed.ts';
 
 export const ADMIN_EMAIL = 'admin@derp.test';
@@ -16,7 +18,12 @@ export interface TestContext {
   close: () => Promise<void>;
 }
 
-export async function createTestApp(env: Record<string, string> = {}): Promise<TestContext> {
+export interface TestAppOptions {
+  modulesDir?: string;
+  streamPingMs?: number;
+}
+
+export async function createTestApp(env: Record<string, string> = {}, opts: TestAppOptions = {}): Promise<TestContext> {
   const config = loadConfig({
     DATABASE_URL: inject('databaseUrl'),
     SESSION_SECRET: 'x'.repeat(32),
@@ -26,8 +33,15 @@ export async function createTestApp(env: Record<string, string> = {}): Promise<T
   });
   const pool = createPool(config.databaseUrl);
   const db = createDb(pool);
-  await seedE2E(db);
-  const app = await buildApp({ config, pool, logger: false, webRoot: null });
+  let app: FastifyInstance;
+  try {
+    await seedE2E(db);
+    await seedModules(await loadModules(config.modules, opts.modulesDir), db, pool);
+    app = await buildApp({ config, pool, logger: false, webRoot: null, ...opts });
+  } catch (err) {
+    await pool.end();
+    throw err;
+  }
   return {
     app,
     pool,

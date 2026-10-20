@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { bigint, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import type { Role } from '@derp/shared';
 
 // A tábladefiníciók a core/migrations/*.sql-lel egyeznek; a séma forrása a migráció.
@@ -41,4 +41,6 @@ export const events = pgTable('events', {
   title: text('title').notNull(),
   data: jsonb('data').$type<Record<string, unknown>>().notNull().default({}),
   parentId: uuid('parent_id'),
+  // Beszúrási sorszám: az SSE `id:` mezője és a `Last-Event-ID` szerinti folytatás alapja.
+  seq: bigint('seq', { mode: 'number' }).notNull().generatedAlwaysAsIdentity(),
 });

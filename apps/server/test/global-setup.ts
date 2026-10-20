@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import pg from 'pg';
 import type { TestProject } from 'vitest/node';
 import { CORE_MIGRATIONS, runMigrations } from '../src/core/migrate.ts';
+import { loadModules, migrationSources } from '../src/core/modules.ts';
 
 declare module 'vitest' {
   export interface ProvidedContext {
@@ -30,7 +31,8 @@ export default async function setup(project: TestProject) {
   const url = new URL(base);
   url.pathname = `/${name}`;
   const pool = new pg.Pool({ connectionString: url.toString() });
-  await runMigrations(pool, [CORE_MIGRATIONS]);
+  // A mag és minden modul migrációi; a tesztek a DERP_MODULES-t alkalmazásonként állítják.
+  await runMigrations(pool, migrationSources(CORE_MIGRATIONS, await loadModules('*')));
   await pool.end();
 
   project.provide('databaseUrl', url.toString());

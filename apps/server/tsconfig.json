@@ -3,5 +3,12 @@
   "compilerOptions": {
     "types": ["node"]
   },
-  "include": ["src", "test", "vitest.config.ts"]
+  "include": [
+    "src",
+    "test",
+    "vitest.config.ts",
+    "../../modules/*/manifest.ts",
+    "../../modules/*/server",
+    "../../modules/*/test"
+  ]
 }
