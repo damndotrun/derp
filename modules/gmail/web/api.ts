@@ -11,7 +11,8 @@ export const accountsKey = ['gmail', 'accounts'] as const;
 export const messageKey = (id: string) => ['gmail', 'message', id] as const;
 
 export const gmailApi = {
-  unassigned: (limit: number) => request<ThreadList>('GET', `/api/gmail/threads?limit=${limit}`),
+  unassigned: (limit: number, view: 'open' | 'dismissed' = 'open') => request<ThreadList>('GET', `/api/gmail/threads?limit=${limit}&view=${view}`),
+  dismiss: (id: string, dismissed: boolean) => request<ThreadDetail>('PUT', `/api/gmail/threads/${id}/dismissed`, { dismissed }),
   thread: (id: string) => request<ThreadDetail>('GET', `/api/gmail/threads/${id}`),
   assign: (id: string, projectId: string) => request<ThreadDetail>('PUT', `/api/gmail/threads/${id}/project`, { projectId }),
   message: (id: string) => request<MessageDetail>('GET', `/api/gmail/messages/${id}`),

@@ -7,7 +7,11 @@ export default {
   id: 'gmail',
   version: '0.1.0',
   menu: [{ path: '/gmail', labelKey: 'gmail.menu', roles: ['admin', 'iroda'] }],
-  eventTypes: [{ type: 'gmail.message', labelKey: 'gmail.event.message' }],
+  eventTypes: [
+    { type: 'gmail.message', labelKey: 'gmail.event.message' },
+    // A régi projekt idővonalán, ha a szálat másik projektbe helyezték át.
+    { type: 'gmail.thread_moved', labelKey: 'gmail.event.thread_moved' },
+  ],
   permissions: [
     // A hozzárendeletlen levelek listája, megnyitása, hozzárendelése és a kézi betöltés.
     { key: 'gmail.assign', roles: ['admin', 'iroda'] },

@@ -46,7 +46,7 @@ interface MailSource {
 - `gmail_accounts`: e-mail-cím (kis- és nagybetűtől függetlenül egyedi), forrás (`mock`/`gmail`), `history_id`,
   utolsó betöltés ideje és hibája.
 - `gmail_threads`: fiók + Gmail-szálazonosító (egyedi), tárgy (az első levélé), első/utolsó levél ideje, `project_id`
-  (egy szál egy projekthez), ki és mikor rendelte hozzá.
+  (egy szál egy projekthez), ki és mikor rendelte hozzá, `dismissed_at`/`dismissed_by` (elvetve, pl. hírlevél).
 - `gmail_messages`: fiók + Gmail-azonosító (egyedi), szál, fejlécek, kivonat, szöveges és HTML-törzs, csatolmány-
   metaadat, irány, levéltípus, `event_id` (a `gmail.message` esemény).
 - `gmail_rules`: kifejezés (kis- és nagybetűtől független reguláris kifejezés, projektkód vagy kulcsszó is lehet),
@@ -56,9 +56,10 @@ interface MailSource {
 
 | Végpont | Mire | Jogosultság |
 | --- | --- | --- |
-| `GET /api/gmail/threads?limit=&offset=` | „Hozzárendeletlen levelek”: státusz, határidő, résztvevők, kivonat, csatolmányszám, javaslat (az első illeszkedő szabály projektje) | `gmail.assign` (admin, iroda) |
+| `GET /api/gmail/threads?limit=&offset=&view=open\|dismissed` | „Hozzárendeletlen levelek” (`view=dismissed`: az elvetettek): státusz, határidő, résztvevők, kivonat, csatolmányszám, javaslat (az első illeszkedő szabály projektje) | `gmail.assign` (admin, iroda) |
 | `GET /api/gmail/threads/:id` | a szál levelei törzzsel (auditnapló: `view`) | hozzárendeletlen szálnál `gmail.assign`, különben aki a projektet látja |
-| `PUT /api/gmail/threads/:id/project` `{ projectId }` | hozzárendelés: a levelek eseményként az idővonalra (auditnapló: `update`); ugyanahhoz újra 200, másik projekthez 409 | `gmail.assign` és a projekt látható |
+| `PUT /api/gmail/threads/:id/project` `{ projectId }` | hozzárendelés: a levelek eseményként az idővonalra, az elvetés megszűnik; ha a szál már másik projekté, áthelyezés (a régi idővonalra `gmail.thread_moved`, a levelek az újra); ugyanahhoz újra nem változik (auditnapló: `update`) | `gmail.assign` és a projekt látható |
+| `PUT /api/gmail/threads/:id/dismissed` `{ dismissed }` | hozzárendeletlen szál elvetése vagy visszaállítása; projekthez rendelt szálnál 409. Az elvetett szál új levele nem hozza vissza | `gmail.assign` |
 | `GET /api/gmail/messages/:id` | egy levél törzzsel és csatolmánylistával (auditnapló: `view`) | mint a szálnál |
 | `POST /api/gmail/sync` | kézi betöltés minden fiókra | `gmail.assign` |
 | `GET/POST /api/gmail/rules`, `PATCH/DELETE /api/gmail/rules/:id` | szabályok; a `PATCH` `position`-nel (0-tól) átrendez | `gmail.rules` (admin, iroda) |
@@ -73,13 +74,17 @@ A terepes a levelek oldalait nem látja; a projekthez rendelt szál leveleit csa
 - `gmail.message` („Levél: <tárgy>”), `source: 'gmail'`, az időpont a levél dátuma; `data`: `{ messageId, threadId,
   from, to, cc, direction, kind, snippet, attachments: [{ name, mimeType, size }] }`. A törzs nincs az eseményben:
   a megjelenítő kibontáskor kéri le (`GET /api/gmail/messages/:id`).
+- `gmail.thread_moved` („Levélszál áthelyezve másik projektbe: <tárgy>”), a régi projekt idővonalán; `data`:
+  `{ threadId, subject, toProjectId, messages }`. Az események csak hozzáfűzhetők, ezért a régi `gmail.message`
+  események megmaradnak; megnyitáskor a levél már az új projekt szerint látható, és a megjelenítő jelzi, hogy a szál
+  azóta másik projekthez tartozik.
 
 ## Felület
 
 `/gmail` (Hozzárendeletlen levelek: szálak státusszal, határidővel, javaslattal, levelek megtekintése, projekt
-választása és „Hozzárendelés”, „Betöltés most”), `/gmail/rules` (szabályszerkesztő), `/gmail/accounts` (admin:
+választása és „Hozzárendelés”, „Elvetés”; „Elvetett” nézet „Visszaállítás”-sal; „Betöltés most”), `/gmail/rules` (szabályszerkesztő), `/gmail/accounts` (admin:
 bekötött fiókok). Menüpont: „Levelek” (admin, iroda). Az idővonalon a levél iránya, partnere, típusa és kivonata;
-„Levél megnyitása” után a törzs és a csatolmánylista.
+„Levél megnyitása” után a törzs és a csatolmánylista, az irodának „Áthelyezés másik projektbe” (új projekt + „Áthelyezés”).
 
 ## Tesztadat
 

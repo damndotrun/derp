@@ -18,7 +18,15 @@ export const Direction = z.enum(['in', 'out']);
 export const AttachmentMeta = z.object({ name: z.string(), mimeType: z.string(), size: z.number().int() });
 export type AttachmentMeta = z.infer<typeof AttachmentMeta>;
 
-export const GMAIL_EVENTS = { message: 'gmail.message' } as const;
+export const GMAIL_EVENTS = { message: 'gmail.message', threadMoved: 'gmail.thread_moved' } as const;
+
+/** A `gmail.thread_moved` esemény `data` mezője (a régi projekt idővonalán). */
+export interface GmailThreadMovedEventData {
+  threadId: string;
+  subject: string;
+  toProjectId: string;
+  messages: number;
+}
 
 /** A `gmail.message` esemény `data` mezője (a törzs nincs benne: kérésre töltődik, auditnaplóval). */
 export interface GmailMessageEventData {
@@ -72,6 +80,8 @@ export const ThreadSummary = z.object({
   projectId: z.uuid().nullable(),
   /** Az első illeszkedő szabály projektje (csak hozzárendeletlen szálnál). */
   suggestion: Suggestion.nullable(),
+  /** Elvetve (pl. hírlevél): nincs a „Hozzárendeletlen levelek” között, visszaállítható. */
+  dismissedAt: iso.nullable(),
 });
 export type ThreadSummary = z.infer<typeof ThreadSummary>;
 
@@ -79,6 +89,8 @@ export const ThreadList = z.object({ items: z.array(ThreadSummary), total: z.num
 export type ThreadList = z.infer<typeof ThreadList>;
 
 export const ThreadsQuery = z.object({
+  /** `open`: a hozzárendeletlen, el nem vetett szálak; `dismissed`: az elvetettek. */
+  view: z.enum(['open', 'dismissed']).default('open'),
   limit: z.coerce.number().int().min(1).max(200).default(50),
   offset: z.coerce.number().int().min(0).default(0),
 });
@@ -86,8 +98,11 @@ export const ThreadsQuery = z.object({
 export const ThreadDetail = ThreadSummary.extend({ messages: z.array(MessageDetail) });
 export type ThreadDetail = z.infer<typeof ThreadDetail>;
 
-/** `PUT /api/gmail/threads/:threadId/project` törzse. */
+/** `PUT /api/gmail/threads/:threadId/project` törzse (hozzárendelés vagy áthelyezés másik projektbe). */
 export const ThreadAssign = z.object({ projectId: z.uuid() });
+
+/** `PUT /api/gmail/threads/:threadId/dismissed` törzse. */
+export const ThreadDismiss = z.object({ dismissed: z.boolean() });
 
 export const MAX_PATTERN = 200;
 

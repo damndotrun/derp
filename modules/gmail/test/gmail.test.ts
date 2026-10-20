@@ -197,9 +197,9 @@ describe('gmail: hozzárendeletlen levelek és hozzárendelés', () => {
     expect(thread).toMatchObject({ projectId: pid, suggestion: null, messageCount: 2 });
     expect(thread.messages[0]!.bodyText).toContain('csarnok légtechnikai felújítására');
 
-    // Ugyanahhoz újra: nem változik; másikhoz: 409.
+    // Ugyanahhoz újra: nem változik.
     expect((await as(iroda)('PUT', `/api/gmail/threads/${threadId}/project`, { projectId: pid })).statusCode).toBe(200);
-    expect((await as(iroda)('PUT', `/api/gmail/threads/${threadId}/project`, { projectId: other })).statusCode).toBe(409);
+    expect((await as(iroda)('GET', `/api/projects/${pid}/events?types=gmail.message`)).json().items).toHaveLength(2);
     const stillListed = ((await as(iroda)('GET', '/api/gmail/threads?limit=200')).json() as ThreadList).items.some((t) => t.id === threadId);
     expect(stillListed).toBe(false);
 
@@ -227,6 +227,70 @@ describe('gmail: hozzárendeletlen levelek és hozzárendelés', () => {
     expect((await as(terepes)('GET', `/api/gmail/messages/${messageId}`)).statusCode).toBe(403);
     expect((await as(terepes)('GET', `/api/gmail/threads/${threadId}`)).statusCode).toBe(403);
     expect((await as(iroda)('GET', `/api/gmail/threads/${threadId}`)).statusCode).toBe(200);
+  });
+
+  it('áthelyezés másik projektbe: a régi idővonalon „áthelyezve” esemény, a levelek az újon; a levél az új projekt szerint látható', async () => {
+    const from = await project('Gmail: áthelyezés innen', [terepesId]);
+    const to = await project('Gmail: áthelyezés ide');
+    const threadId = await fixtureThread('Légkezelő ajánlatkérés – Teszt utcai iroda');
+    expect((await as(iroda)('PUT', `/api/gmail/threads/${threadId}/project`, { projectId: from })).statusCode).toBe(200);
+    const before = (await as(iroda)('GET', `/api/projects/${from}/events?types=gmail.message`)).json().items as Array<{ data: { messageId: string } }>;
+    expect(before).toHaveLength(2);
+    expect((await as(terepes)('GET', `/api/gmail/messages/${before[0]!.data.messageId}`)).statusCode).toBe(200);
+
+    expect((await as(terepes)('PUT', `/api/gmail/threads/${threadId}/project`, { projectId: to })).statusCode).toBe(403);
+    const moved = await as(iroda)('PUT', `/api/gmail/threads/${threadId}/project`, { projectId: to });
+    expect(moved.statusCode).toBe(200);
+    expect(moved.json()).toMatchObject({ projectId: to, messageCount: 2 });
+
+    const fromEvents = (await as(iroda)('GET', `/api/projects/${from}/events`)).json().items as Array<{ type: string; title: string; data: Record<string, unknown> }>;
+    const movedEvent = fromEvents.find((e) => e.type === 'gmail.thread_moved');
+    expect(movedEvent).toMatchObject({
+      title: 'Levélszál áthelyezve másik projektbe: Légkezelő ajánlatkérés – Teszt utcai iroda',
+      data: { threadId, toProjectId: to, messages: 2 },
+    });
+    const toEvents = (await as(iroda)('GET', `/api/projects/${to}/events?types=gmail.message`)).json().items as Array<{ data: { messageId: string } }>;
+    expect(toEvents.map((e) => e.data.messageId).sort()).toEqual(before.map((e) => e.data.messageId).sort());
+
+    // A levelet már az új projekt szerint lehet megnyitni: a régi projekthez rendelt terepes nem látja.
+    expect((await as(terepes)('GET', `/api/gmail/messages/${before[0]!.data.messageId}`)).statusCode).toBe(403);
+    expect(await one<{ n: number }>(sql`SELECT count(*)::int AS n FROM gmail_messages m WHERE m.thread_id = ${threadId} AND m.event_id IS NULL`)).toEqual({ n: 0 });
+
+    // Vissza az eredetibe: ott újra megjelennek, a másikban áthelyezés-esemény.
+    expect((await as(iroda)('PUT', `/api/gmail/threads/${threadId}/project`, { projectId: from })).statusCode).toBe(200);
+    expect((await as(iroda)('GET', `/api/projects/${from}/events?types=gmail.message`)).json().items).toHaveLength(4);
+    expect((await as(iroda)('GET', `/api/projects/${to}/events?types=gmail.thread_moved`)).json().items).toHaveLength(1);
+  });
+
+  it('elvetés (pl. hírlevél): kikerül a listából, az elvetettek között látszik, visszaállítható; hozzárendeléskor megszűnik', async () => {
+    const threadId = await fixtureThread('Havi hírlevél – akciók');
+    const open = async () => ((await as(iroda)('GET', '/api/gmail/threads?limit=200')).json() as ThreadList).items.map((t) => t.id);
+    const dismissedList = async () => ((await as(iroda)('GET', '/api/gmail/threads?limit=200&view=dismissed')).json() as ThreadList).items;
+    expect(await open()).toContain(threadId);
+
+    expect((await as(terepes)('PUT', `/api/gmail/threads/${threadId}/dismissed`, { dismissed: true })).statusCode).toBe(403);
+    const res = await as(iroda)('PUT', `/api/gmail/threads/${threadId}/dismissed`, { dismissed: true });
+    expect(res.statusCode).toBe(200);
+    expect((res.json() as ThreadDetail).dismissedAt).not.toBeNull();
+    expect(await open()).not.toContain(threadId);
+    expect((await dismissedList()).map((t) => t.id)).toContain(threadId);
+
+    // Új levél a szálban: elvetve marad.
+    const deliver = await as(iroda)('POST', '/api/gmail/test/deliver', { threadId: 'mock-t-hirlevel', from: 'hirlevel@szerelvenybolt.test', subject: 'Havi hírlevél – akciók', body: 'Új akciók' });
+    expect(deliver.statusCode).toBe(200);
+    expect(await open()).not.toContain(threadId);
+
+    expect((await as(iroda)('PUT', `/api/gmail/threads/${threadId}/dismissed`, { dismissed: false })).statusCode).toBe(200);
+    expect(await open()).toContain(threadId);
+
+    // Elvetett szál hozzárendelése: az elvetés megszűnik; projekthez rendelt szál nem vethető el.
+    expect((await as(iroda)('PUT', `/api/gmail/threads/${threadId}/dismissed`, { dismissed: true })).statusCode).toBe(200);
+    const pid = await project('Gmail: elvetett, majd hozzárendelt');
+    const assigned = await as(iroda)('PUT', `/api/gmail/threads/${threadId}/project`, { projectId: pid });
+    expect(assigned.json()).toMatchObject({ projectId: pid, dismissedAt: null });
+    expect((await dismissedList()).map((t) => t.id)).not.toContain(threadId);
+    expect((await as(iroda)('PUT', `/api/gmail/threads/${threadId}/dismissed`, { dismissed: true })).statusCode).toBe(409);
+    expect((await as(iroda)('PUT', `/api/gmail/threads/${crypto.randomUUID()}/dismissed`, { dismissed: true })).statusCode).toBe(404);
   });
 
   it('nem létező szál 404, törölt projekthez nem rendelhető', async () => {
@@ -270,7 +334,9 @@ describe('gmail: fiókok és kézi betöltés', () => {
 
     const created = await as(admin)('POST', '/api/gmail/accounts', { email: 'Masodik@derp.test' });
     expect(created.statusCode).toBe(201);
-    expect(created.json()).toMatchObject({ email: 'Masodik@derp.test', source: 'mock', messageCount: 7, lastSyncError: null });
+    // A mock-postafiók minden levele betöltődött (a fixture 7 levele és a korábbi tesztek kézbesítései).
+    expect(created.json()).toMatchObject({ email: 'Masodik@derp.test', source: 'mock', lastSyncError: null });
+    expect((created.json() as { messageCount: number }).messageCount).toBeGreaterThanOrEqual(7);
     expect((await as(admin)('POST', '/api/gmail/accounts', { email: 'masodik@derp.test' })).statusCode).toBe(409);
 
     const list = (await as(admin)('GET', '/api/gmail/accounts')).json() as AccountList;

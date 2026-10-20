@@ -103,3 +103,66 @@ test('mock Gmail: szál hozzárendelése a „Hozzárendeletlen levelek” list�
   await expect(tamas.getByRole('alert')).toContainText('Nincs jogosultság.');
   await tamas.context().close();
 });
+
+test('mock Gmail: hírlevél elvetése és visszaállítása; szál áthelyezése másik projektbe az idővonalról', async ({ page }, info) => {
+  const run = `${info.project.name} ${Date.now()}`;
+  const from = `Gmail áthelyezés innen (${run})`;
+  const to = `Gmail áthelyezés ide (${run})`;
+  const newsletter = `Havi hírlevél (${run})`;
+  const subject = `Légcsatorna ajánlat (${run})`;
+
+  await login(page, IRODA);
+  const projectUrls: string[] = [];
+  for (const name of [from, to]) {
+    await page.goto('/projects');
+    await page.getByLabel('Projekt neve').fill(name);
+    await page.getByRole('button', { name: 'Projekt létrehozása' }).click();
+    await expect(page.getByRole('heading', { name })).toBeVisible();
+    projectUrls.push(page.url());
+  }
+  for (const [s, body] of [
+    [newsletter, 'E havi akcióink.'],
+    [subject, 'Csatoltan küldjük árajánlatunkat a légcsatornára.'],
+  ] as const) {
+    const res = await page.request.post('/api/gmail/test/deliver', { data: { from: 'Valaki <valaki@kulso.test>', subject: s, body } });
+    expect(res.ok()).toBe(true);
+  }
+
+  // Elvetés → az „Elvetett” nézetben → visszaállítás.
+  await openMenuItem(page, 'Levelek');
+  const inbox = page.getByRole('list', { name: 'Hozzárendeletlen levelek' });
+  const item = (s: string) => page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: s, exact: true }) });
+  await inbox.getByRole('listitem').filter({ has: page.getByRole('heading', { name: newsletter, exact: true }) }).getByRole('button', { name: 'Elvetés' }).click();
+  await expect(page.getByRole('status')).toContainText('elvetve');
+  await expect(inbox.getByRole('heading', { name: newsletter, exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Elvetett', exact: true }).click();
+  const dismissed = page.getByRole('list', { name: 'Elvetett levélszálak' });
+  await dismissed.getByRole('listitem').filter({ has: page.getByRole('heading', { name: newsletter, exact: true }) }).getByRole('button', { name: 'Visszaállítás' }).click();
+  await expect(page.getByRole('status')).toContainText('visszakerült');
+  await page.getByRole('button', { name: 'Hozzárendeletlen', exact: true }).click();
+  await expect(item(newsletter)).toBeVisible();
+
+  // Hozzárendelés az első projekthez, majd áthelyezés a másodikba az idővonalról.
+  await item(subject).getByLabel('Projekt').selectOption({ label: from });
+  await item(subject).getByRole('button', { name: 'Hozzárendelés' }).click();
+  await expect(page.getByRole('status')).toContainText('projekthez került');
+  await page.goto(projectUrls[0]!);
+  const events = page.getByRole('list', { name: 'Események' });
+  await expect(events).toBeVisible();
+  const expandAll = page.getByRole('button', { name: 'Mindet kibont' });
+  if (await expandAll.isVisible()) await expandAll.click();
+  const mail = events.getByRole('listitem').filter({ hasText: `Levél: ${subject}` });
+  await mail.getByRole('button', { name: /Levél megnyitása/ }).click();
+  const move = mail.getByRole('form', { name: 'Áthelyezés másik projektbe' });
+  await move.getByLabel('Új projekt').selectOption({ label: to });
+  await move.getByRole('button', { name: 'Áthelyezés' }).click();
+  await expect(mail).toContainText('A levélszál azóta másik projekthez tartozik.');
+
+  // A régi idővonalon „áthelyezve” esemény (újratöltés nélkül), az újon a levél.
+  if (await expandAll.isVisible()) await expandAll.click();
+  await expect(events.getByRole('listitem').filter({ hasText: `Levélszál áthelyezve másik projektbe: ${subject}` })).toBeVisible();
+  await page.goto(projectUrls[1]!);
+  await expect(page.getByRole('heading', { name: to })).toBeVisible();
+  if (await expandAll.isVisible()) await expandAll.click();
+  await expect(page.getByRole('list', { name: 'Események' }).getByRole('listitem').filter({ hasText: `Levél: ${subject}` })).toBeVisible();
+});
