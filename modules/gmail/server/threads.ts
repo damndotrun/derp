@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import type { Db, ModuleSeedContext } from '@derp/server/module-api';
-import type { MessageDetail, Suggestion, ThreadDetail, ThreadList, ThreadSummary } from '../shared.ts';
+import { GMAIL_EVENTS, type GmailThreadMovedEventData, type MessageDetail, type Suggestion, type ThreadDetail, type ThreadList, type ThreadSummary } from '../shared.ts';
 import { deriveStatus, detectProject, hasDeadline, type Direction, type MailKind, type ProjectRule } from './classify.ts';
 import { emitThreadEvents } from './sync.ts';
 
@@ -15,6 +15,7 @@ interface ThreadRow {
   first_message_at: string | Date;
   last_message_at: string | Date;
   project_id: string | null;
+  dismissed_at: string | Date | null;
 }
 
 interface MessageRow {
@@ -33,7 +34,7 @@ interface MessageRow {
 }
 
 const SELECT_THREADS = sql`
-  SELECT t.id, a.email AS account, t.subject, t.first_message_at, t.last_message_at, t.project_id
+  SELECT t.id, a.email AS account, t.subject, t.first_message_at, t.last_message_at, t.project_id, t.dismissed_at
   FROM gmail_threads t JOIN gmail_accounts a ON a.id = t.account_id`;
 
 const SELECT_MESSAGES = sql`
@@ -88,6 +89,7 @@ function summarize(t: ThreadRow, messages: MessageRow[], rules: Array<ProjectRul
     deadline: hasDeadline(text),
     projectId: t.project_id,
     suggestion,
+    dismissedAt: t.dismissed_at ? isoOf(t.dismissed_at) : null,
   };
 }
 
@@ -99,16 +101,18 @@ async function messagesOf(db: Exec, threadIds: string[]): Promise<Map<string, Me
   return byThread;
 }
 
-/** A „Hozzárendeletlen levelek”: a projekthez nem rendelt szálak, a legutóbb aktív elöl. */
-export async function listUnassigned(db: Db, { limit, offset }: { limit: number; offset: number }): Promise<ThreadList> {
-  const [{ total } = { total: 0 }] = await rows<{ total: number }>(
-    db,
-    sql`SELECT count(*)::int AS total FROM gmail_threads WHERE project_id IS NULL`,
-  );
-  const threads = await rows<ThreadRow>(
-    db,
-    sql`${SELECT_THREADS} WHERE t.project_id IS NULL ORDER BY t.last_message_at DESC, t.id LIMIT ${limit} OFFSET ${offset}`,
-  );
+/**
+ * A „Hozzárendeletlen levelek”: a projekthez nem rendelt, el nem vetett szálak, a legutóbb aktív elöl; `dismissed`
+ * nézetben az elvetettek (a legutóbb elvetett elöl).
+ */
+export async function listUnassigned(
+  db: Db,
+  { limit, offset, view }: { limit: number; offset: number; view: 'open' | 'dismissed' },
+): Promise<ThreadList> {
+  const where = view === 'open' ? sql`t.project_id IS NULL AND t.dismissed_at IS NULL` : sql`t.project_id IS NULL AND t.dismissed_at IS NOT NULL`;
+  const order = view === 'open' ? sql`t.last_message_at DESC, t.id` : sql`t.dismissed_at DESC, t.id`;
+  const [{ total } = { total: 0 }] = await rows<{ total: number }>(db, sql`SELECT count(*)::int AS total FROM gmail_threads t WHERE ${where}`);
+  const threads = await rows<ThreadRow>(db, sql`${SELECT_THREADS} WHERE ${where} ORDER BY ${order} LIMIT ${limit} OFFSET ${offset}`);
   const messages = await messagesOf(db, threads.map((t) => t.id));
   const rules = await activeRules(db);
   return { items: threads.map((t) => summarize(t, messages.get(t.id)!, rules)), total };
@@ -133,17 +137,24 @@ export async function getMessage(db: Db, id: string): Promise<MessageDetail | nu
   return m ? toMessage(m, m.project_id) : null;
 }
 
-export type AssignOutcome = { status: 'assigned'; events: number } | { status: 'unchanged' } | { status: 'conflict' } | { status: 'not_found' };
+export type AssignOutcome =
+  | { status: 'assigned'; events: number }
+  | { status: 'moved'; fromProjectId: string; events: number }
+  | { status: 'unchanged' }
+  | { status: 'not_found' };
+
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 /**
- * A szál projekthez rendelése: a levelei eseményként az idővonalra kerülnek (a későbbi levelei a betöltéskor). Egy
- * szál egy projekthez tartozik: ugyanahhoz újra hozzárendelve nem változik, másikhoz `conflict`.
+ * A szál projekthez rendelése vagy áthelyezése. Hozzárendeléskor a levelei eseményként az idővonalra kerülnek (a
+ * későbbi levelei a betöltéskor), az elvetés megszűnik. Áthelyezéskor (az események csak hozzáfűzhetők) a régi
+ * projekt idővonalára `gmail.thread_moved` esemény kerül, a levelek pedig újra, az új projekt idővonalára.
  */
 export async function assignThread(
   db: Db,
   appendEvent: ModuleSeedContext['appendEvent'],
   input: { threadId: string; projectId: string; userId: string },
-  onAssigned?: (tx: Parameters<Parameters<Db['transaction']>[0]>[0], subject: string) => Promise<void>,
+  onChanged?: (tx: Tx, subject: string, fromProjectId: string | null) => Promise<void>,
 ): Promise<AssignOutcome> {
   return db.transaction(async (tx) => {
     const [t] = await rows<{ id: string; project_id: string | null; subject: string }>(
@@ -152,12 +163,44 @@ export async function assignThread(
     );
     if (!t) return { status: 'not_found' } as const;
     if (t.project_id === input.projectId) return { status: 'unchanged' } as const;
-    if (t.project_id) return { status: 'conflict' } as const;
     await tx.execute(
-      sql`UPDATE gmail_threads SET project_id = ${input.projectId}, assigned_by = ${input.userId}, assigned_at = now() WHERE id = ${t.id}`,
+      sql`UPDATE gmail_threads SET project_id = ${input.projectId}, assigned_by = ${input.userId}, assigned_at = now(),
+            dismissed_at = NULL, dismissed_by = NULL
+          WHERE id = ${t.id}`,
     );
+    if (t.project_id) {
+      const [{ n } = { n: 0 }] = await rows<{ n: number }>(tx, sql`SELECT count(*)::int AS n FROM gmail_messages WHERE thread_id = ${t.id}`);
+      const data: GmailThreadMovedEventData = { threadId: t.id, subject: t.subject, toProjectId: input.projectId, messages: n };
+      await appendEvent(
+        {
+          projectId: t.project_id,
+          type: GMAIL_EVENTS.threadMoved,
+          source: 'user',
+          title: `Levélszál áthelyezve másik projektbe: ${t.subject.trim() || '(nincs tárgy)'}`,
+          actorId: input.userId,
+          data: { ...data },
+        },
+        tx,
+      );
+      await tx.execute(sql`UPDATE gmail_messages SET event_id = NULL WHERE thread_id = ${t.id}`);
+    }
     const events = await emitThreadEvents(tx, appendEvent, t.id, input.projectId);
-    await onAssigned?.(tx, t.subject);
-    return { status: 'assigned', events } as const;
+    await onChanged?.(tx, t.subject, t.project_id);
+    return t.project_id ? ({ status: 'moved', fromProjectId: t.project_id, events } as const) : ({ status: 'assigned', events } as const);
   });
+}
+
+export type DismissOutcome = { status: 'ok'; subject: string } | { status: 'assigned' } | { status: 'not_found' };
+
+/** Hozzárendeletlen szál elvetése vagy visszaállítása; projekthez rendelt szálnál `assigned`. */
+export async function setDismissed(db: Db, input: { threadId: string; dismissed: boolean; userId: string }): Promise<DismissOutcome> {
+  const [t] = await rows<{ project_id: string | null; subject: string }>(db, sql`SELECT project_id, subject FROM gmail_threads WHERE id = ${input.threadId}`);
+  if (!t) return { status: 'not_found' };
+  if (t.project_id) return { status: 'assigned' };
+  await db.execute(
+    input.dismissed
+      ? sql`UPDATE gmail_threads SET dismissed_at = coalesce(dismissed_at, now()), dismissed_by = ${input.userId} WHERE id = ${input.threadId} AND project_id IS NULL`
+      : sql`UPDATE gmail_threads SET dismissed_at = NULL, dismissed_by = NULL WHERE id = ${input.threadId} AND project_id IS NULL`,
+  );
+  return { status: 'ok', subject: t.subject };
 }
