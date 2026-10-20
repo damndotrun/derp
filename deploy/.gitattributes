@@ -1,0 +1,2 @@
+# A NAS-on futó szkript CRLF-fel elszállna (Windowsos checkout, core.autocrlf=true).
+*.sh text eol=lf

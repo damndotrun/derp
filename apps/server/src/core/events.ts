@@ -1,4 +1,4 @@
-import { asc, desc, eq, gt, max } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, inArray, max, sql, type SQL } from 'drizzle-orm';
 import type { TimelineEvent } from '@derp/shared';
 import type { Db } from './db.ts';
 import { events, users } from './schema.ts';
@@ -49,12 +49,47 @@ const toTimelineEvent = ({ event, actorName }: { event: EventRow; actorName: str
 const withActor = (db: Db) =>
   db.select({ event: events, actorName: users.name }).from(events).leftJoin(users, eq(users.id, events.actorId));
 
-export async function listProjectEvents(db: Db, projectId: string, limit: number): Promise<TimelineEvent[]> {
+export interface ProjectEventsQuery {
+  limit: number;
+  /** Az ennél az eseménynél régebbiek (lapozás). */
+  before?: string;
+  /** Csak ezek a típusok; üres = mind. */
+  types?: string[];
+}
+
+/**
+ * Egy projekt eseményei időpont, majd azonosító szerint csökkenő sorrendben, kurzoros lapozással. A kurzor egy
+ * esemény azonosítója: a folytatás az adatbázisban tárolt (mikroszekundumos) időpontjához mér, így az azonos
+ * ezredmásodpercben történt események sem vesznek el a lapok határán.
+ */
+export async function listProjectEvents(
+  db: Db,
+  projectId: string,
+  { limit, before, types = [] }: ProjectEventsQuery,
+): Promise<{ items: TimelineEvent[]; nextCursor: string | null }> {
+  const where: SQL[] = [eq(events.projectId, projectId)];
+  if (types.length > 0) where.push(inArray(events.type, types));
+  if (before) {
+    where.push(
+      sql`(${events.occurredAt}, ${events.id}) < (SELECT c.occurred_at, c.id FROM events c WHERE c.id = ${before} AND c.project_id = ${projectId})`,
+    );
+  }
   const rows = await withActor(db)
-    .where(eq(events.projectId, projectId))
+    .where(and(...where))
     .orderBy(desc(events.occurredAt), desc(events.id))
-    .limit(limit);
-  return rows.map(toTimelineEvent);
+    .limit(limit + 1);
+  const items = rows.slice(0, limit).map(toTimelineEvent);
+  return { items, nextCursor: rows.length > limit ? items.at(-1)!.id : null };
+}
+
+/** A projekt idővonalán előforduló eseménytípusok és darabszámuk. */
+export async function projectEventTypes(db: Db, projectId: string): Promise<Array<{ type: string; count: number }>> {
+  return db
+    .select({ type: events.type, count: count() })
+    .from(events)
+    .where(eq(events.projectId, projectId))
+    .groupBy(events.type)
+    .orderBy(asc(events.type));
 }
 
 /** Esemény a sorszámával (az SSE-folyamhoz). */

@@ -1,6 +1,7 @@
-# dERP — 1. munkacsomag: app + db. A `backup` szolgáltatás és az `e2e` profil a 13./16. munkacsomagban jön.
+# dERP — app + db, helyi / általános Docker-gépre. Az `e2e` profil a 16. munkacsomagban jön.
 # Indítás: cp deploy/.env.example deploy/.env (titkok kitöltése), majd
 #   docker compose -f deploy/compose.yaml up -d
+# A plasticgarden NAS-on NEM ez fut, hanem a compose.nas.yaml (TrueNAS Custom App), ld. docs/telepites.md.
 name: derp
 
 services:
@@ -19,10 +20,12 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
       TZ_DISPLAY: ${TZ_DISPLAY:-Europe/Budapest}
       DERP_MODULES: ${DERP_MODULES:-*}
+      GOOGLE_LOGIN_CLIENT_ID: ${GOOGLE_LOGIN_CLIENT_ID:-}
+      GOOGLE_LOGIN_CLIENT_SECRET: ${GOOGLE_LOGIN_CLIENT_SECRET:-}
       NODE_ENV: production
       NODE_OPTIONS: --max-old-space-size=256
     ports:
-      - "8080:8080"
+      - "${DERP_HOST_PORT:-8080}:8080"
     mem_limit: 384m
 
   db:
