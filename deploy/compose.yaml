@@ -24,6 +24,8 @@ services:
       GOOGLE_LOGIN_CLIENT_SECRET: ${GOOGLE_LOGIN_CLIENT_SECRET:-}
       # A visits modul ICS-tokenjeinek hash-eléséhez; ha a modul aktív, nélküle az app nem indul el.
       ICS_TOKEN_PEPPER: ${ICS_TOKEN_PEPPER:-}
+      # Mappafigyelő (watch modul): a figyelt szerver-mappa bejárásának gyakorisága másodpercben (0 = csak kézzel).
+      WATCH_INTERVAL_SEC: ${WATCH_INTERVAL_SEC:-300}
       NODE_ENV: production
       NODE_OPTIONS: --max-old-space-size=256
     ports:
@@ -31,6 +33,9 @@ services:
     volumes:
       # Feltöltött fájlok és bélyegképek (docs modul, DATA_DIR); a konténer cseréjét túléli.
       - ${DERP_FILES_DIR:-files-data}:/data/files
+      # A figyelt szerver-mappa (watch modul, WATCH_ROOT=/watch), csak olvashatóan; a konténer UID 1000-ként olvassa.
+      # Alapból egy üres, névvel ellátott kötet; valós mappához DERP_WATCH_DIR=<hoszt-útvonal>.
+      - ${DERP_WATCH_DIR:-watch-data}:/watch:ro
     mem_limit: 384m
 
   db:
@@ -52,3 +57,4 @@ services:
 volumes:
   db-data:
   files-data:
+  watch-data:

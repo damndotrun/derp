@@ -28,6 +28,9 @@ services:
     volumes:
       # A fájltárolás (DATA_DIR) a 4. munkacsomagtól; a kötet már most a helyén van.
       - /mnt/Tank/derp/files:/data/files
+      # A figyelt szerver-mappa (watch modul, WATCH_ROOT=/watch, bejárás 300 s-onként), csak olvashatóan. Egyelőre a
+      # teszt-dataset; valós céges mappa bekötése külön jóváhagyással. A konténer UID 1000-ként olvassa.
+      - /mnt/Tank/derp/watch-test:/watch:ro
     mem_limit: 384m
 
   db:
