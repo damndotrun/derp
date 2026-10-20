@@ -219,3 +219,29 @@ describe('chat: csatolmány a dokumentumtárba', () => {
     expect((await post(iroda, b, { body: 'lopott', attachments: [{ id: fileId, name: 'x.txt' }] })).statusCode).toBe(400);
   });
 });
+
+describe('chat: kliens oldali időbélyeg (capturedAt, offline sor)', () => {
+  it('az offline írt üzenet ideje a terepi időpont; a sorrend (seq) a szerverre érkezésé marad', async () => {
+    const pid = await project('Chat: terepi időpont');
+    const at = new Date(Date.now() - 45 * 60_000).toISOString();
+    expect((await post(admin, pid, { body: 'Online, most' })).statusCode).toBe(201);
+    const offline = await post(iroda, pid, { body: 'Offline írva', capturedAt: at });
+    expect(offline.statusCode).toBe(201);
+    expect((offline.json() as { createdAt: string }).createdAt).toBe(at);
+
+    const items = (await page(iroda, pid)).items;
+    expect(items.map((m) => m.body)).toEqual(['Online, most', 'Offline írva']);
+    expect(items[1]!.seq).toBeGreaterThan(items[0]!.seq);
+    const evs = (await (await as(iroda)('GET', `/api/projects/${pid}/events`)).json()).items as Array<{ title: string; occurredAt: string }>;
+    expect(evs.find((e) => e.title === 'Chat-üzenet: Offline írva')!.occurredAt).toBe(at);
+  });
+
+  it('jövőbeli időpont helyett a szerver ideje', async () => {
+    const pid = await project('Chat: siető óra');
+    const before = Date.now();
+    const res = await post(iroda, pid, { body: 'Siető óra', capturedAt: new Date(Date.now() + 86_400_000).toISOString() });
+    const t = Date.parse((res.json() as { createdAt: string }).createdAt);
+    expect(t).toBeGreaterThanOrEqual(before - 1_000);
+    expect(t).toBeLessThanOrEqual(Date.now() + 1_000);
+  });
+});
