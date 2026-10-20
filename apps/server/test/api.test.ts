@@ -184,7 +184,5 @@ describe('adatvédelmi tájékoztató', () => {
     expect(res.body).toContain('<h1>Adatvédelmi tájékoztató</h1>');
     expect(res.body).toContain('gmail.readonly');
     expect(res.body).toContain('6000 Kecskemét, Műkerti sétány 9.');
-    // A dERP-re vonatkozó kapcsolat (a meglévő `utemezo` adatvédelmi nyilatkozatával egyezően).
-    expect(res.body).toContain('mailto:dokaklima@gmail.com');
   });
 });

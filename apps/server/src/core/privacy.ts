@@ -38,7 +38,6 @@ const html = `<!doctype html>
   <li><strong>Képviselő:</strong> Dóka Károly</li>
   <li><strong>E-mail:</strong> <a href="mailto:klima@dokakft.hu">klima@dokakft.hu</a> ·
     <strong>Telefon:</strong> <a href="tel:+3676416470">+36 76 416 470</a></li>
-  <li><strong>Kapcsolat a dERP adatkezelésével kapcsolatban:</strong> <a href="mailto:dokaklima@gmail.com">dokaklima@gmail.com</a></li>
 </ul>
 <p>A dERP a cég belső ügyviteli rendszere: a projekteket az első bejelentéstől a lezárásig kezeli, irodai gépen és
 a terepen használt telefonokon. Csak a cég által felvett felhasználók léphetnek be. A cég nyilvános weboldalának
