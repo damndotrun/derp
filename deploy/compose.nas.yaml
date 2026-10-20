@@ -4,7 +4,8 @@
 # deploy/nas-telepites.sh (a kép építése, frissítés előtti pg_dump, app.create / app.update).
 #
 # Titkok (a NAS-on, egyik SMB-share sem fedi, 700/600 root):
-#   /mnt/Tank/derp/secrets/.env    DATABASE_URL, SESSION_SECRET, GOOGLE_LOGIN_CLIENT_ID, GOOGLE_LOGIN_CLIENT_SECRET
+#   /mnt/Tank/derp/secrets/.env    DATABASE_URL, SESSION_SECRET, GOOGLE_LOGIN_CLIENT_ID, GOOGLE_LOGIN_CLIENT_SECRET,
+#                                  ICS_TOKEN_PEPPER (visits modul, min. 32 bájt; nélküle az app nem indul el)
 #   /mnt/Tank/derp/secrets/db.env  POSTGRES_PASSWORD
 services:
   app:
