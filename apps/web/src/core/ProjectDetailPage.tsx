@@ -10,11 +10,11 @@ import { Select } from '@/components/ui/select';
 import { api } from './api.ts';
 import { ClientSelect } from './ClientSelect.tsx';
 import { ContactList } from './ContactList.tsx';
-import { EventList } from './EventList.tsx';
 import { formatDateTime } from './format.ts';
 import { t } from './i18n.ts';
 import { LoadError } from './LoadError.tsx';
 import { isOffice, useSession, useUser } from './session.ts';
+import { Timeline } from './Timeline.tsx';
 
 export function ProjectDetailPage() {
   const { id = '' } = useParams();
@@ -23,11 +23,6 @@ export function ProjectDetailPage() {
   const office = isOffice(user);
   const tz = session.data?.tzDisplay ?? 'Europe/Budapest';
   const project = useQuery({ queryKey: ['projects', id], queryFn: () => api.project(id), retry: false });
-  const events = useQuery({
-    queryKey: ['projects', id, 'events'],
-    queryFn: () => api.projectEvents(id),
-    enabled: project.isSuccess,
-  });
   const [editing, setEditing] = useState(false);
 
   if (project.isPending) return <p>{t('common.loading')}</p>;
@@ -79,12 +74,10 @@ export function ProjectDetailPage() {
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>{t('events.title')}</CardTitle>
+          <CardTitle>{t('timeline.title')}</CardTitle>
         </CardHeader>
         <CardContent>
-          {events.isPending && <p>{t('common.loading')}</p>}
-          {events.isError && <p className="text-destructive">{events.error.message}</p>}
-          {events.data && <EventList events={events.data.items} timeZone={tz} />}
+          <Timeline projectId={id} timeZone={tz} />
         </CardContent>
       </Card>
     </div>
