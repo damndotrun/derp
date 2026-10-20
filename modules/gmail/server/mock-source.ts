@@ -36,11 +36,19 @@ const snippetOf = (body: string) => body.replace(/\s+/g, ' ').trim().slice(0, 14
 export class MockMailSource implements MailSource {
   readonly kind = 'mock' as const;
   private readonly messages = new Map<string, Stored>();
+  /**
+   * A `historyId` időalapú és csak nő (mint a Gmailé), így a szerver újraindítása után a korábban eltárolt érték
+   * kisebb marad az új postafiók-történetnél, és az azóta érkezett levél nem marad ki.
+   */
   private history = 0;
   /** Ennél kisebb `historyId`-ról a `listHistory` elévülést jelez. */
   private oldestHistoryId = 0;
 
-  constructor(fixture: FixtureMessage[] = loadFixture(), now: Date = new Date()) {
+  private readonly clock: () => number;
+
+  /** A `clock` a `historyId` alsó határa (tesztben `() => 0`, így a `historyId` 1, 2, 3, …). */
+  constructor(fixture: FixtureMessage[] = loadFixture(), now: Date = new Date(), clock: () => number = Date.now) {
+    this.clock = clock;
     for (const f of fixture) this.deliver(f, now);
   }
 
@@ -61,7 +69,7 @@ export class MockMailSource implements MailSource {
       bodyHtml: null,
       attachments: f.attachments ?? [],
     };
-    this.history += 1;
+    this.history = Math.max(this.history + 1, this.clock());
     this.messages.set(f.id, { message, historyId: this.history });
     return message;
   }

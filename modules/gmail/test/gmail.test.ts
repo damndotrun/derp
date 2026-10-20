@@ -82,6 +82,7 @@ describe('gmail: betöltés a mock-forrásból', () => {
         msg('uj-2', { threadId: 't-ketto', minutesAgo: 30, from: 'Iroda <levelek@derp.test>', labelIds: ['SENT'] }),
       ],
       now,
+      () => 0,
     );
     const a = await account('betoltes@derp.test');
 
@@ -105,7 +106,7 @@ describe('gmail: betöltés a mock-forrásból', () => {
   });
 
   it('elévült historyId → újrabetöltés az utolsó ismert levél dátumától, duplikáció nélkül (levélben és eseményben sem)', async () => {
-    const source = new MockMailSource([msg('e-1', { threadId: 't-e', minutesAgo: 600 }), msg('e-2', { threadId: 't-e', minutesAgo: 20 })]);
+    const source = new MockMailSource([msg('e-1', { threadId: 't-e', minutesAgo: 600 }), msg('e-2', { threadId: 't-e', minutesAgo: 20 })], new Date(), () => 0);
     const a = await account('elevult@derp.test');
     await syncAccount(deps(source), a);
     const pid = await project('Gmail: elévülés');
@@ -134,6 +135,21 @@ describe('gmail: betöltés a mock-forrásból', () => {
     const events = (await as(iroda)('GET', `/api/projects/${pid}/events?types=gmail.message`)).json().items as Array<{ title: string; data: { messageId: string } }>;
     expect(events.map((e) => e.title)).toEqual(['Levél: Teszt e-3', 'Levél: Teszt e-2', 'Levél: Teszt e-1']);
     expect(new Set(events.map((e) => e.data.messageId)).size).toBe(3);
+  });
+
+  it('a szerver újraindítása után (új mock-postafiók) a korábban tárolt historyId-tól az új levél megjön', async () => {
+    // Az első folyamat postafiókjába a fixture után még egy levél jött; az új folyamaté csak a fixture-t ismeri, de
+    // később indult (az időalapú historyId nagyobb), így a tárolt historyId-nál nem kisebb az új levélé.
+    const fixture = [msg('r-1', { threadId: 't-r', minutesAgo: 30 })];
+    const a = await account('ujrainditas@derp.test');
+    const before = new MockMailSource(fixture, new Date(), () => 1_000);
+    before.deliver(msg('r-0', { threadId: 't-r', minutesAgo: 10 }));
+    await syncAccount(deps(before), a);
+    const restarted = new MockMailSource(fixture, new Date(), () => 2_000);
+    restarted.deliver(msg('r-2', { threadId: 't-r' }));
+    const res = await syncAccount(deps(restarted), { ...a, historyId: await historyOf(a.id) });
+    expect(res).toMatchObject({ mode: 'history', fetched: 1, inserted: 1 });
+    expect(await countOf(a.id)).toEqual({ n: 3, distinct: 3 });
   });
 });
 

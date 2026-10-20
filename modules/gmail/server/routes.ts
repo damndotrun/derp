@@ -35,12 +35,13 @@ export async function routes(app: FastifyInstance, ctx: ModuleContext): Promise<
   const source = createSource(kind);
   const deps: SyncDeps = { db: ctx.db, appendEvent: ctx.appendEvent, source };
 
-  // Egyszerre egy betöltés fut; a közben kért kézi betöltés ugyanannak az eredményét kapja.
-  let running: Promise<SyncResult[]> | null = null;
-  const runSync = (): Promise<SyncResult[]> =>
-    (running ??= syncAll(deps, (account, err) => app.log.error({ err, account }, 'gmail: a fiók betöltése nem sikerült')).finally(() => {
-      running = null;
-    }));
+  // A betöltések sorban futnak: a futás közben kért betöltés utána indul, így a közben érkezett levelet is látja.
+  let last: Promise<unknown> = Promise.resolve();
+  const runSync = (): Promise<SyncResult[]> => {
+    const run = last.then(() => syncAll(deps, (account, err) => app.log.error({ err, account }, 'gmail: a fiók betöltése nem sikerült')));
+    last = run.catch(() => undefined);
+    return run;
+  };
 
   // Ütemezett betöltés (tesztben nem: ott a seed, a kézi gomb és a teszt-végpont tölt be).
   if (ctx.config.nodeEnv !== 'test') {
@@ -51,7 +52,7 @@ export async function routes(app: FastifyInstance, ctx: ModuleContext): Promise<
     app.addHook('onClose', async () => {
       clearTimeout(first);
       clearInterval(timer);
-      await running?.catch(() => undefined);
+      await last;
     });
   }
 
